@@ -346,6 +346,18 @@ This found a real bug: the constant pool deduplicated with `==`, and IEEE says
 `0.0 == -0.0`, so a later `f64 '0'` reused the slot interned for an earlier
 `f64 '-0'` and came out negative. See [`docs/TESTING.md`](docs/TESTING.md).
 
+## Speed
+
+There is a loop benchmark against C, Rust, Go, Java, LuaJIT, Lua, NumPy and
+Python in [`bench/`](bench/README.md). The short version: on a loop the hardware
+caps — a dependent chain no compiler can reorder — Luarus is **21× slower than
+C**, and every optimising compiler lands within 6% of each other because none of
+them can beat the latency. On a loop compilers *can* vectorise, the real gap
+shows: **345× slower than Rust**.
+
+Most of that is loop overhead rather than arithmetic. Seventeen instructions per
+iteration, of which two do the work.
+
 ## Layout
 
 | crate | contents |

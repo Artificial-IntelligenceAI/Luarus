@@ -1,0 +1,9 @@
+# Compiled benchmark binaries and class files
+sum_c
+chain_c
+sum_rs
+chain_rs
+sum_go
+chain_go
+*.class
+tiny.lrs

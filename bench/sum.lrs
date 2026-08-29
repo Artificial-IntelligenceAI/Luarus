@@ -1,0 +1,6 @@
+-- Sum 1..N as 64-bit integers. Nothing is printed inside the loop.
+var i64 (sum) = '0' end
+loop temp store-in i64 (i) = '1' to '100000000' {
+  set (sum) = (sum) + (i) end
+}
+print[(sum) \n] end

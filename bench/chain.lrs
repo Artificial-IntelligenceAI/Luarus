@@ -1,0 +1,7 @@
+-- A dependent chain: each value needs the one before it, so nothing can
+-- vectorise it and no optimiser can replace it with a formula.
+var i64 (sum) = '0' end
+loop temp store-in i64 (i) = '1' to '100000000' {
+  set (sum) = | (sum) + (i) | % '1000000007' end
+}
+print[(sum) \n] end
