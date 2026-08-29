@@ -55,7 +55,7 @@ impl TExpr {
 #[derive(Clone, Debug)]
 pub enum TStmt {
     Store { place: Place, value: TExpr, line: u32 },
-    Print { value: TExpr, ty: RtType, line: u32 },
+    Print { items: Vec<TExpr>, newline: bool, line: u32 },
 }
 
 /// A whole checked program, ready for code generation.
@@ -157,26 +157,21 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
 
-            Stmt::Print { value, .. } => {
-                let ty = match self.probe(value) {
-                    Some(t) => t,
-                    None => {
-                        if let Some(n) = self.first_unresolved(value) {
-                            return Err(self.lookup(&n.text, n.span).unwrap_err());
-                        }
-                        return Err(Diagnostic::new(
-                            value.span(),
-                            "cannot tell what type this value is",
-                        )
-                        .with_help(
-                            "a bare literal has no type of its own; print a declared name, or \
-                             declare it first with `var <type> (name) = ... end`",
-                        ));
-                    }
-                };
-                let value = self.check(value, ty)?;
+            Stmt::Print { items, newline, .. } => {
+                let mut checked = Vec::with_capacity(items.len());
+                for item in items {
+                    // Everything printed is stringified, so a bare literal in a
+                    // print list needs no annotation: it is simply text. This is
+                    // the one place Luarus converts without being told to.
+                    let ty = self.probe(item).unwrap_or(RtType::Str);
+                    checked.push(self.check(item, ty)?);
+                }
                 let line = self.line(stmt.span());
-                self.out.stmts.push(TStmt::Print { value, ty, line });
+                self.out.stmts.push(TStmt::Print {
+                    items: checked,
+                    newline: *newline,
+                    line,
+                });
                 Ok(())
             }
         }
@@ -211,7 +206,7 @@ impl<'a> Checker<'a> {
     /// Those deserve very different messages, so the error paths ask this first.
     fn first_unresolved<'e>(&self, e: &'e Expr) -> Option<&'e luarus_syntax::ast::Name> {
         match e {
-            Expr::Literal { .. } => None,
+            Expr::Literal { .. } | Expr::Escape { .. } => None,
             Expr::Ident(n) => (!self.scope.contains_key(&n.text)).then_some(n),
             Expr::Group { inner, .. } => self.first_unresolved(inner),
             Expr::Unary { operand, .. } => self.first_unresolved(operand),
@@ -228,6 +223,8 @@ impl<'a> Checker<'a> {
     fn probe(&self, e: &Expr) -> Option<RtType> {
         match e {
             Expr::Literal { .. } => None,
+            // A bare escape is text whatever the surroundings.
+            Expr::Escape { .. } => Some(RtType::Str),
             Expr::Ident(n) => self.scope.get(&n.text).map(|b| b.ty),
             Expr::Group { inner, .. } => self.probe(inner),
             Expr::Unary { operand, .. } => self.probe(operand),
@@ -253,6 +250,16 @@ impl<'a> Checker<'a> {
                     Err(d)
                 }
             },
+
+            Expr::Escape { text, span } => {
+                if expected != RtType::Str {
+                    return Err(Diagnostic::new(
+                        *span,
+                        format!("an escape is `str`, but `{}` was expected here", expected.name()),
+                    ));
+                }
+                Ok(TExpr::Const(Const::Str(text.clone()), RtType::Str))
+            }
 
             Expr::Ident(n) => {
                 let b = self.lookup(&n.text, n.span)?;

@@ -32,8 +32,9 @@ pub enum Op {
     Gt(RtType),
     Ge(RtType),
 
-    /// Pop and print, formatting according to the static type.
-    Print(RtType),
+    /// Pop and write, formatting according to the static type. Writes no
+    /// newline: `print` emits one explicitly when it stands alone in its chain.
+    Write(RtType),
     /// Discard the top of the stack.
     Pop,
     /// Stop execution.
@@ -60,7 +61,7 @@ impl Op {
             Op::Le(_) => "le",
             Op::Gt(_) => "gt",
             Op::Ge(_) => "ge",
-            Op::Print(_) => "print",
+            Op::Write(_) => "write",
             Op::Pop => "pop",
             Op::Halt => "halt",
         }

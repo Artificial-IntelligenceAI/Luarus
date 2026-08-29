@@ -1,33 +1,35 @@
 -- The line that started the language.
 var f16 (x) = '1000' end
-print (x) end
+print[(x)] end
 
 -- Names are raw text between parentheses, so they can be anything at all.
-var str (a friendly greeting) = 'hello from Luarus' end
-print (a friendly greeting) end
+var str (name) = 'Lua ripoff 🤣' end
+print["Hello, " (name)] end
 
 var i32 (🎯) = '42' end
-print (🎯) end
+print["the answer is " (🎯)] end
 
 -- The same literal means different things under different types.
-var i32  (as an int)  = '1000' end
-var str  (as text)    = '1000' end
-var f64  (as a float) = '1000' end
-print (as an int) end
-print (as text) end
-print (as a float) end
+var i32 (as an int)  = '1000' end
+var str (as text)    = '1000' end
+var f64 (as a float) = '1000' end
+print[(as an int) " / " (as text) " / " (as a float)] end
 
--- Grouping is [ ... ], because ( ... ) already means a name.
-var i32 (total) = [ '2' + '3' ] * (as an int) end
-print (total) end
+-- Grouping is | ... |, and it nests.
+var i32 (total) = | '2' + '3' | * (as an int) end
+var i32 (nested) = | | '1' + '1' | * '3' | + '1' end
+print["total " (total) ", nested " (nested)] end
+
+-- Chained statements share one `end`. A chained print writes no newline of its
+-- own, so it says so with \n.
+print["1" \n], print["2" \n], print["3" \n] end
 
 -- Modifiers go before `var`. `pub` also exports the binding.
-global var u8 (counter) = '0' end
-pub var str (version) = '0.1.0' end
+global var u8  (counter) = '0'     end
+pub    var str (version) = '0.1.0' end
 set (counter) = (counter) + '1' end
-print (counter) end
-print (version) end
+print["counter " (counter) " of luarus " (version)] end
 
 -- Comparisons produce bool.
 var bool (is big) = (total) > '1000' end
-print (is big) end
+print["is it big? " (is big)] end

@@ -121,7 +121,7 @@ fn show_op(chunk: &Chunk, op: Op) -> String {
         | Op::Le(t)
         | Op::Gt(t)
         | Op::Ge(t)
-        | Op::Print(t) => format!("{m}.{}", t.name()),
+        | Op::Write(t) => format!("{m}.{}", t.name()),
         Op::Pop | Op::Halt => m.to_string(),
     }
 }

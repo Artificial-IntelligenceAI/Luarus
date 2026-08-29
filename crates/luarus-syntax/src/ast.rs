@@ -75,9 +75,12 @@ pub enum Expr {
     /// on the type it is checked against.
     Literal { text: String, span: Span },
     Ident(Name),
+    /// A bare escape such as `\n`. Always `str`, whatever the context.
+    Escape { text: String, span: Span },
     Unary { op: UnOp, operand: Box<Expr>, span: Span },
     Binary { op: BinOp, lhs: Box<Expr>, rhs: Box<Expr>, span: Span },
-    /// `[ ... ]`. Grouping uses brackets because `(...)` means an identifier.
+    /// `| ... |`. Grouping uses pipes: `(...)` means an identifier and `[...]`
+    /// is print's argument list, so neither was available.
     Group { inner: Box<Expr>, span: Span },
 }
 
@@ -85,6 +88,7 @@ impl Expr {
     pub fn span(&self) -> Span {
         match self {
             Expr::Literal { span, .. }
+            | Expr::Escape { span, .. }
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }
             | Expr::Group { span, .. } => *span,
@@ -115,7 +119,11 @@ pub enum Stmt {
         span: Span,
     },
     Print {
-        value: Expr,
+        /// Juxtaposed items, written back to back inside `[ ... ]`.
+        items: Vec<Expr>,
+        /// Whether to end with a newline. True exactly when this `print` is the
+        /// only statement in its chain, per the chaining rule in the spec.
+        newline: bool,
         span: Span,
     },
 }

@@ -10,7 +10,7 @@ on the Luarus VM.
 
 ```luarus
 var f16 (x) = '1000' end
-print (x) end
+print[(x)] end
 ```
 
 That declares a variable **named `x`**, of type `f16`, holding **1000**.
@@ -42,14 +42,54 @@ This is why the annotation is mandatory rather than decorative: without it there
 is nothing to read the literal *as*. A literal with no type in reach is a
 compile error, not a guess.
 
-**3. `end` terminates every statement.** Not just blocks — everything. It is
-Luarus's semicolon.
-
-Because `( ... )` is opaque, it cannot also mean grouping. Grouping is `[ ... ]`:
+**3. `end` closes a statement chain.** Statements chain with `,` and one `end`
+closes the chain. A lone statement is a one-element chain and still needs its
+`end`.
 
 ```luarus
-var i32 (total) = [ '2' + '3' ] * '4' end   -- 20
+var i32 (a) = '1', var i32 (b) = '2', set (a) = (b) end
 ```
+
+Because `( ... )` is a name and `[ ... ]` is print's list, neither was free for
+grouping. Grouping is `| ... |`, and it nests:
+
+```luarus
+var i32 (total)  = | '2' + '3' | * '4' end            -- 20
+var i32 (nested) = | | '1' + '1' | * '3' | + '1' end  -- 7
+```
+
+A `|` where a value is expected opens a group and one where an operator is
+expected closes it, so there is no ambiguity — at the cost of `|` never becoming
+a bitwise operator.
+
+## Printing
+
+`print` takes its values in brackets, juxtaposed rather than separated. Anything
+in the list is stringified, whatever its type:
+
+```luarus
+var str (name) = 'Lua ripoff 🤣' end
+print["Hello, " (name)] end          -- Hello, Lua ripoff 🤣
+
+var f16 (x) = '1000' end
+var u8  (k) = '7' end
+print["x=" (x) " k=" (k)] end        -- x=1000.0 k=7
+```
+
+This is the one place Luarus converts without being told to.
+
+A `print` supplies a newline only when it stands **alone** in its chain. Chained
+prints write exactly what you give them, so they say `\n` for themselves:
+
+```luarus
+print["1" \n], print["2" \n], print["3" \n] end
+
+print["1"] end
+print["2"] end
+```
+
+Both print `1`, `2`, `3` and `1`, `2` on their own lines. `\n`, `\t`, `\r`,
+`\0` and `\\` also work as bare tokens outside the quotes, as above.
 
 ## Types
 
@@ -94,7 +134,7 @@ error: `300` is out of range for `u8`
 error: `(cont)` is not declared
  --> app.lrs:2:7
   |
-2 | print (cont) end
+2 | print[(cont)] end
   |       ^^^^^^
   = help: a variable named `(count)` is declared; did you mean that?
 ```
@@ -120,11 +160,13 @@ cargo build --release
 
 ```
   code:
-      0  2  const          0    -- f16    1000 (0x63d0)
-      1  2  store.local    0    -- (x)
-      2  3  load.local     0    -- (x)
-      3  3  print.f16
-      4  3  halt
+      0      2  const          0    -- f16    1000 (0x63d0)
+      1      2  store.local    0    -- (x)
+      2      3  load.local     0    -- (x)
+      3      3  write.f16
+      4      3  const          1    -- str    "\n"
+      5      3  write.str
+      6      3  halt
 ```
 
 ## Layout
@@ -142,7 +184,7 @@ No third-party dependencies — the whole toolchain is `std` only.
 ## Status
 
 v0.1 is a complete pipeline over a deliberately small language: declarations,
-assignment, `print`, arithmetic, and comparison. Control flow, functions,
+assignment, chained statements, `print`, arithmetic, and comparison. Control flow, functions,
 records and modules are not implemented yet. See [`docs/SPEC.md`](docs/SPEC.md)
 for the language as it currently stands and [`docs/ROADMAP.md`](docs/ROADMAP.md)
 for what comes next.

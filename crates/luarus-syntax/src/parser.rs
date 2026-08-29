@@ -5,8 +5,11 @@ use crate::span::Span;
 
 /// Parse a whole source file.
 ///
+/// Statements are grouped into chains: `stmt (',' stmt)* 'end'`. A lone
+/// statement is a one-element chain and still needs its `end`.
+///
 /// Errors are collected rather than thrown one at a time: the parser
-/// resynchronises at the next `end` so one bad statement does not hide the rest.
+/// resynchronises at the next `end` so one bad chain does not hide the rest.
 pub fn parse(src: &str) -> Result<Program, Vec<Diagnostic>> {
     let tokens = Lexer::new(src).tokenize().map_err(|d| vec![d])?;
     let mut p = Parser { tokens, pos: 0, errors: Vec::new() };
@@ -71,8 +74,8 @@ impl Parser {
     fn program(&mut self) -> Program {
         let mut stmts = Vec::new();
         while !self.at_eof() {
-            match self.stmt() {
-                Ok(s) => stmts.push(s),
+            match self.chain() {
+                Ok(mut c) => stmts.append(&mut c),
                 Err(d) => {
                     self.errors.push(d);
                     self.recover();
@@ -80,6 +83,25 @@ impl Parser {
             }
         }
         Program { stmts }
+    }
+
+    /// `stmt (',' stmt)* 'end'`.
+    fn chain(&mut self) -> Result<Vec<Stmt>, Diagnostic> {
+        let mut stmts = vec![self.stmt()?];
+        while self.peek().tok == Tok::Comma {
+            self.bump();
+            stmts.push(self.stmt()?);
+        }
+        self.expect_end()?;
+
+        // A `print` supplies its own newline only when it stands alone. Chained
+        // prints are expected to carry an explicit `\n`.
+        if stmts.len() == 1 {
+            if let Some(Stmt::Print { newline, .. }) = stmts.first_mut() {
+                *newline = true;
+            }
+        }
+        Ok(stmts)
     }
 
     fn stmt(&mut self) -> Result<Stmt, Diagnostic> {
@@ -112,9 +134,7 @@ impl Parser {
             return self.assign_stmt(start);
         }
         if self.eat_word("print") {
-            let value = self.expr()?;
-            let end = self.expect_end("print")?;
-            return Ok(Stmt::Print { value, span: start.to(end) });
+            return self.print_stmt(start);
         }
 
         let t = self.peek().clone();
@@ -139,16 +159,39 @@ impl Parser {
         let name = self.ident("after the type in a `var` declaration")?;
         self.expect_assign()?;
         let value = self.expr()?;
-        let end = self.expect_end("var")?;
-        Ok(Stmt::Var { modifier, ty, name, value, span: start.to(end) })
+        let span = start.to(value.span());
+        Ok(Stmt::Var { modifier, ty, name, value, span })
+    }
+
+    /// `print [ item item ... ]`. Items are juxtaposed, not separated.
+    fn print_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
+        if self.peek().tok != Tok::LBracket {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, format!("expected `[` after `print`, found {}", t.tok.describe()))
+                .with_help("print takes its values in brackets: `print[\"hello \" (name)] end`"));
+        }
+        let open = self.bump().span;
+
+        let mut items = Vec::new();
+        while self.peek().tok != Tok::RBracket {
+            if self.at_eof() {
+                return Err(self
+                    .err(open, "unterminated `print`")
+                    .with_help("this `[` is never closed by a `]`"));
+            }
+            items.push(self.expr()?);
+        }
+        let end = self.bump().span;
+        Ok(Stmt::Print { items, newline: false, span: start.to(end) })
     }
 
     fn assign_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
         let name = self.ident("after `set`")?;
         self.expect_assign()?;
         let value = self.expr()?;
-        let end = self.expect_end("set")?;
-        Ok(Stmt::Assign { name, value, span: start.to(end) })
+        let span = start.to(value.span());
+        Ok(Stmt::Assign { name, value, span })
     }
 
     fn ident(&mut self, ctx: &str) -> Result<Name, Diagnostic> {
@@ -175,14 +218,17 @@ impl Parser {
         }
     }
 
-    fn expect_end(&mut self, what: &str) -> Result<Span, Diagnostic> {
+    fn expect_end(&mut self) -> Result<Span, Diagnostic> {
         if self.at_word("end") {
             Ok(self.bump().span)
         } else {
             let t = self.peek().clone();
             Err(self
-                .err(t.span, format!("expected `end` to close this `{what}`, found {}", t.tok.describe()))
-                .with_help("`end` terminates every statement in Luarus"))
+                .err(t.span, format!("expected `end`, found {}", t.tok.describe()))
+                .with_help(
+                    "`end` closes a statement chain; chain statements with `,` or close this one \
+                     with `end`",
+                ))
         }
     }
 
@@ -270,14 +316,21 @@ impl Parser {
                 let span = self.bump().span;
                 Ok(Expr::Ident(Name { text, span }))
             }
-            Tok::LBracket => {
+            Tok::Escape(text) => {
+                let span = self.bump().span;
+                Ok(Expr::Escape { text, span })
+            }
+            Tok::Pipe => {
                 let start = self.bump().span;
                 let inner = self.expr()?;
-                if self.peek().tok != Tok::RBracket {
+                if self.peek().tok != Tok::Pipe {
                     let t = self.peek().clone();
                     return Err(self
-                        .err(t.span, format!("expected `]`, found {}", t.tok.describe()))
-                        .with_help("grouping uses brackets, because `(...)` already means a name"));
+                        .err(t.span, format!("expected `|` to close this group, found {}", t.tok.describe()))
+                        .with_help(
+                            "grouping uses pipes: `(...)` is a name and `[...]` is print's list, \
+                             so neither was free",
+                        ));
                 }
                 let end = self.bump().span;
                 Ok(Expr::Group { inner: Box::new(inner), span: start.to(end) })
@@ -286,7 +339,7 @@ impl Parser {
                 let span = self.peek().span;
                 Err(self
                     .err(span, format!("expected a value, found {}", other.describe()))
-                    .with_help("a value is a quoted literal like `'12'`, a name like `(x)`, or `[ ... ]`"))
+                    .with_help("a value is a quoted literal like `'12'`, a name like `(x)`, or `| ... |`"))
             }
         }
     }

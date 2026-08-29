@@ -134,10 +134,10 @@ impl<'a> Vm<'a> {
                     })?;
                     *slot = Some(v);
                 }
-                Op::Print(ty) => {
+                Op::Write(ty) => {
                     let v = self.pop()?;
                     let text = v.display(ty);
-                    writeln!(self.out, "{text}").map_err(|e| RuntimeError {
+                    write!(self.out, "{text}").map_err(|e| RuntimeError {
                         message: format!("could not write output: {e}"),
                         line: 0,
                         source: self.chunk.source.clone(),

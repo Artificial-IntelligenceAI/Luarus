@@ -9,6 +9,8 @@ pub enum Tok {
     Ident(String),
     /// A literal, written `'text'`. Holds the unescaped text, still untyped.
     Str(String),
+    /// A bare escape such as `\n`, outside any quotes. Always `str`.
+    Escape(String),
 
     Assign,
     Plus,
@@ -24,6 +26,9 @@ pub enum Tok {
     GtEq,
     LBracket,
     RBracket,
+    /// `|`, which both opens and closes a group.
+    Pipe,
+    Comma,
     Eof,
 }
 
@@ -34,6 +39,7 @@ impl Tok {
             Tok::Word(w) => format!("`{w}`"),
             Tok::Ident(n) => format!("identifier `({n})`"),
             Tok::Str(_) => "a literal".to_string(),
+            Tok::Escape(_) => "an escape".to_string(),
             Tok::Assign => "`=`".into(),
             Tok::Plus => "`+`".into(),
             Tok::Minus => "`-`".into(),
@@ -48,6 +54,8 @@ impl Tok {
             Tok::GtEq => "`>=`".into(),
             Tok::LBracket => "`[`".into(),
             Tok::RBracket => "`]`".into(),
+            Tok::Pipe => "`|`".into(),
+            Tok::Comma => "`,`".into(),
             Tok::Eof => "end of file".into(),
         }
     }
@@ -135,6 +143,8 @@ impl<'a> Lexer<'a> {
             b'%' => Some((Tok::Percent, 1)),
             b'[' => Some((Tok::LBracket, 1)),
             b']' => Some((Tok::RBracket, 1)),
+            b'|' => Some((Tok::Pipe, 1)),
+            b',' => Some((Tok::Comma, 1)),
             _ => None,
         };
         if let Some((tok, len)) = simple {
@@ -149,6 +159,7 @@ impl<'a> Lexer<'a> {
         match b {
             b'(' => self.lex_ident(start),
             b'\'' | b'"' => self.lex_literal(start, b),
+            b'\\' => self.lex_escape(start),
             _ => self.lex_word(start),
         }
     }
@@ -250,6 +261,32 @@ impl<'a> Lexer<'a> {
             text.push(ch);
             self.pos += ch.len_utf8();
         }
+    }
+
+    /// A bare escape outside quotes, as in `print["1" \n]`.
+    fn lex_escape(&mut self, start: usize) -> Result<Token, Diagnostic> {
+        self.pos += 1; // consume the backslash
+        let Some(c) = self.peek() else {
+            return Err(Diagnostic::new(Span::new(start, self.pos), "escape is missing its letter")
+                .with_help("a bare escape is written `\\n`, `\\t`, `\\r`, `\\0` or `\\\\`"));
+        };
+        let text = match c {
+            b'n' => "\n",
+            b't' => "\t",
+            b'r' => "\r",
+            b'0' => "\0",
+            b'\\' => "\\",
+            _ => {
+                self.pos += 1;
+                return Err(Diagnostic::new(
+                    Span::new(start, self.pos),
+                    format!("invalid escape `\\{}`", c as char),
+                )
+                .with_help("a bare escape is written `\\n`, `\\t`, `\\r`, `\\0` or `\\\\`"));
+            }
+        };
+        self.pos += 1;
+        Ok(Token { tok: Tok::Escape(text.to_string()), span: Span::new(start, self.pos) })
     }
 
     /// A bare word: `var`, `end`, `global`, a type name, and so on.
