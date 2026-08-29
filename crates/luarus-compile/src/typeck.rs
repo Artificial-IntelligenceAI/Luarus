@@ -73,6 +73,9 @@ pub enum TStmt {
         to: TExpr,
         /// `to` counts up to and including the bound; `times` stops before it.
         inclusive: bool,
+        /// True when the target may double as the loop's own counter, because
+        /// the body never assigns to it. Saves a copy every iteration.
+        alias: bool,
         body: Vec<TStmt>,
         counter: u32,
         bound: u32,
@@ -312,6 +315,10 @@ impl<'a> Checker<'a> {
                 let body = self.block(body);
                 self.scopes.pop();
 
+                // If nothing in the body assigns to the target, it can be the
+                // counter rather than a copy of it.
+                let alias = matches!(place, Some(Place::Local(_))) && !writes(&body, place.unwrap());
+
                 let line = self.line(stmt.span());
                 Ok(TStmt::Loop {
                     place,
@@ -319,6 +326,7 @@ impl<'a> Checker<'a> {
                     from,
                     to,
                     inclusive,
+                    alias,
                     body,
                     counter,
                     bound,
@@ -624,6 +632,18 @@ fn signed_width_hint(ty: RtType) -> u32 {
         RtType::U16 => 32,
         _ => 64,
     }
+}
+
+/// Whether any statement in `stmts` assigns to `place`, at any depth.
+fn writes(stmts: &[TStmt], place: Place) -> bool {
+    stmts.iter().any(|s| match s {
+        TStmt::Store { place: p, .. } => *p == place,
+        TStmt::Print { .. } => false,
+        TStmt::If { arms, else_arm, .. } => {
+            arms.iter().any(|a| writes(&a.body, place)) || writes(else_arm, place)
+        }
+        TStmt::Loop { place: p, body, .. } => *p == Some(place) || writes(body, place),
+    })
 }
 
 /// Levenshtein distance, used only for "did you mean" hints.

@@ -37,6 +37,14 @@ pub enum Op {
     /// Pop a bool; continue at this instruction if it is false.
     JumpIfFalse(u32),
 
+    /// The tail of a counting loop, in one instruction.
+    ///
+    /// If `counter` is below `bound`, step it by one and continue at `target`;
+    /// otherwise fall through. Stepping only while strictly below means the
+    /// increment can never overflow the counter's type, and it leaves the
+    /// counter holding the last value the loop used.
+    LoopStep { counter: u32, bound: u32, target: u32, ty: RtType },
+
     /// Fail unless local `n` holds a whole number.
     ///
     /// Only `er` can carry a fraction into a loop bound, and only when the
@@ -75,6 +83,7 @@ impl Op {
             Op::Ge(_) => "ge",
             Op::Jump(_) => "jump",
             Op::JumpIfFalse(_) => "jump.false",
+            Op::LoopStep { .. } => "loop.step",
             Op::RequireWhole(_) => "require.whole",
             Op::Write(_) => "write",
             Op::Pop => "pop",

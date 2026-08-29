@@ -49,12 +49,12 @@ Luarus compiler does no constant folding of any kind.
 | Java 26 | 0.046s | 25× | 1.7× | **loop eliminated** |
 | LuaJIT 2.1 | 0.056s | 30× | 3.5× | |
 | NumPy 2.0 | 0.077s | 41× | 1.3× | **not a loop at all** |
-| Lua 5.5 | 0.213s | 114× | 3.7× | |
-| Python 3.9 | 3.291s | 1756× | 3.7× | |
-| **Luarus** | **4.488s** | **2395×** | 3.8× | |
+| Lua 5.5 | 0.213s | 114× | 3.8× | |
+| **Luarus** | **1.996s** | **1071×** | 4.1× | |
+| Python 3.9 | 3.295s | 1768× | 4.0× | |
 
 Three of these are not measurements of looping. Against Rust — the fastest thing
-here still running a real loop — Luarus is **345×** slower.
+here still running a real loop — Luarus is **153×** slower.
 
 ## B — `sum = (sum + i) % 1000000007`
 
@@ -64,10 +64,10 @@ here still running a real loop — Luarus is **345×** slower.
 | Rust (rustc -O) | 0.249s | 1.0× | 3.9× | |
 | Go 1.26 | 0.257s | 1.0× | 4.0× | |
 | Java 26 | 0.264s | 1.1× | 3.2× | |
-| Lua 5.5 | 0.395s | 1.6× | 3.9× | |
-| LuaJIT 2.1 | 0.433s | 1.7× | 3.9× | |
-| Python 3.9 | 3.790s | 15× | 3.9× | |
-| **Luarus** | **5.142s** | **21×** | 4.0× | |
+| Lua 5.5 | 0.393s | 1.6× | 3.9× | |
+| LuaJIT 2.1 | 0.427s | 1.7× | 3.9× | |
+| **Luarus** | **2.837s** | **11×** | 4.0× | |
+| Python 3.9 | 3.913s | 16× | 4.1× | |
 
 ## What the two tables say together
 
@@ -81,45 +81,54 @@ it interprets one instruction at a time — because dispatch overhead hides in t
 shadow of the modulo latency. The same gap on benchmark A, where the compiled
 languages can vectorise, is 114×.
 
-So Luarus's real distance from a compiler is **21× on latency-bound work and
-345× on throughput-bound work**. The first number is the flattering one.
+So Luarus's real distance from a compiler is **11× on latency-bound work and
+153× on throughput-bound work**. The first number is the flattering one.
 
 **Lua 5.5 beats LuaJIT on B.** LuaJIT is Lua 5.1, where every number is a
 double, so its `%` is a floating-point remainder; Lua 5.5 has native integers.
 The JIT wins benchmark A by 4× and loses B by 10%.
 
-## Where Luarus's time actually goes
+## Where Luarus's time goes, and what was done about it
 
-The loop from benchmark B disassembles to seventeen instructions per iteration,
-of which **two** do the arithmetic:
+The first version of this benchmark measured a loop that spent seventeen
+instructions per iteration, **two** of which did the arithmetic. The counter was
+loaded three times and copied into the target every time round, whether or not
+the body read it.
+
+Two changes fixed most of it:
+
+- **A fused `loop.step`**, in the shape of Lua's `FORLOOP`: step, test and
+  branch in one instruction rather than nine.
+- **The target doubles as the counter** when the body never assigns to it, so
+  the copy happens once before the loop instead of every iteration. A body that
+  *does* assign to the target gives this up, or the assignment would move the
+  counter.
+
+Seventeen instructions became seven:
 
 ```
-     10      load.local     2    -- (%loop counter)   ┐ copy the counter
-     11      store.local    1    -- (i)               ┘ into the target
-     12      load.local     0    -- (sum)             ┐
-     13      load.local     1    -- (i)               │ the actual work:
-     14      add.i64                                  │ two instructions
-     15      const          3    -- int 1000000007    │
-     16      rem.i64                                  ┘
+     12      load.local     0    -- (sum)            ┐
+     13      load.local     1    -- (i)              │ the actual work
+     14      add.i64                                 │
+     15      const          3    -- int 1000000007   │
+     16      rem.i64                                 ┘
      17      store.local    0    -- (sum)
-     18      load.local     2    -- (%loop counter)   ┐
-     19      load.local     3    -- (%loop bound)     │ test
-     20      lt.i64                                   │
-     21      jump.false     27                        ┘
-     22      load.local     2    -- (%loop counter)   ┐
-     23      const          1    -- int 1             │ increment
-     24      add.i64                                  │
-     25      store.local    2    -- (%loop counter)   ┘
-     26      jump           10
+     18      loop.step.i64  1 3 12  -- (i)           the entire loop tail
 ```
 
-The counter is loaded three times per iteration and copied to the target every
-time round, whether or not the body reads it. Lua's VM does the whole of
-lines 18–26 in a single `FORLOOP` instruction.
+Instruction count was only half the story. The first cut of `loop.step` went
+through the VM's general arithmetic, matching on the operator and type and
+building a fresh `1` every iteration — and it cost about as much as the nine
+instructions it replaced, giving only 1.4×. Specialising the machine-integer
+case, where nearly every loop lives, is what turned that into:
 
-That is the obvious next optimisation and it is not subtle: a fused
-increment-test-branch, and using the counter slot directly as the target when
-the body never writes to it. Seventeen instructions would become about six.
+| | before | after | |
+| --- | --- | --- | --- |
+| A `sum += i` | 4.488s | **1.996s** | 2.25× faster |
+| B dependent chain | 5.142s | **2.837s** | 1.81× faster |
+
+Which moved Luarus from 21× to **11×** off C on the chain, and past CPython on
+both benchmarks.
 
 ## Not measured
 

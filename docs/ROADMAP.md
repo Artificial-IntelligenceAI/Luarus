@@ -50,13 +50,6 @@ promoted to a real part of the language rather than a diagnostics helper.
 triggers a collection, choosing the syntax for `free` and the rule its misuse
 cites, and settling whether strings move onto the heap or stay refcounted.
 
-**Loop instructions.** A counting loop currently emits seventeen instructions
-per iteration, of which two do arithmetic — the counter is loaded three times
-and copied into the target whether or not the body reads it. A fused
-increment-test-branch, in the shape of Lua's `FORLOOP`, plus using the counter
-slot directly when the body never writes the target, would cut that to about
-six. See [`bench/README.md`](../bench/README.md).
-
 ## Deliberately open
 
 - Whether `| |` stays as the grouping delimiter, and whether giving it up would

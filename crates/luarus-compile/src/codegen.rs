@@ -30,6 +30,15 @@ pub fn emit(source_name: &str, checked: &Checked) -> Chunk {
     chunk
 }
 
+/// The value one, in whichever type a loop is counting.
+fn one_of(ty: luarus_bytecode::RtType) -> luarus_bytecode::Const {
+    match ty {
+        t if t.is_unsigned_int() => luarus_bytecode::Const::Uint(1),
+        luarus_bytecode::RtType::Er => luarus_bytecode::Const::Er(luarus_num::Rational::one()),
+        _ => luarus_bytecode::Const::Int(1),
+    }
+}
+
 fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
     for stmt in stmts {
         match stmt {
@@ -49,15 +58,10 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::Write(item.ty()), *line);
                 }
             }
-            TStmt::Loop { place, ty, from, to, inclusive, body, counter, bound, line } => {
-                let one = chunk.add_const(match ty {
-                    t if t.is_unsigned_int() => luarus_bytecode::Const::Uint(1),
-                    luarus_bytecode::RtType::Er => {
-                        luarus_bytecode::Const::Er(luarus_num::Rational::one())
-                    }
-                    _ => luarus_bytecode::Const::Int(1),
-                });
-
+            TStmt::Loop { place, ty, from, to, inclusive, alias, body, counter, bound, line } => {
+                // Setup always writes the hidden counter rather than the
+                // target, because an empty range must leave the target
+                // untouched for `assign-before-reading` to catch it.
                 emit_expr(chunk, from, *line);
                 chunk.emit(Op::StoreLocal(*counter), *line);
                 emit_expr(chunk, to, *line);
@@ -70,57 +74,60 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::RequireWhole(*bound), *line);
                 }
 
-                // An empty range stores nothing at all, so the target is left
-                // unassigned and reading it says so. `to` includes its bound,
-                // `times` stops before it.
+                // `to` includes its bound, `times` stops before it.
                 let guard = if *inclusive { Op::Le(*ty) } else { Op::Lt(*ty) };
                 chunk.emit(Op::LoadLocal(*counter), *line);
                 chunk.emit(Op::LoadLocal(*bound), *line);
                 chunk.emit(guard, *line);
                 let skip = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
 
+                // A `times` loop's last value is one below its count. Lowering
+                // the bound to that value here lets a single instruction serve
+                // both forms; the guard has already proved the count is at
+                // least one, so this cannot go below zero.
+                if !*inclusive {
+                    let one = chunk.add_const(one_of(*ty));
+                    chunk.emit(Op::LoadLocal(*bound), *line);
+                    chunk.emit(Op::Const(one), *line);
+                    chunk.emit(Op::Sub(*ty), *line);
+                    chunk.emit(Op::StoreLocal(*bound), *line);
+                }
+
+                // When the body never assigns to the target, the target *is*
+                // the counter and the copy happens once rather than every time
+                // round. Otherwise the loop keeps its own counter and copies.
+                let step = match (*alias, place) {
+                    (true, Some(Place::Local(slot))) => {
+                        chunk.emit(Op::LoadLocal(*counter), *line);
+                        chunk.emit(Op::StoreLocal(*slot), *line);
+                        *slot
+                    }
+                    _ => *counter,
+                };
+
                 let top = chunk.code.len() as u32;
-                if let Some(place) = place {
-                    chunk.emit(Op::LoadLocal(*counter), *line);
-                    chunk.emit(
-                        match place {
-                            Place::Local(slot) => Op::StoreLocal(*slot),
-                            Place::Global(idx) => Op::StoreGlobal(*idx),
-                        },
-                        *line,
-                    );
+                if !*alias {
+                    if let Some(place) = place {
+                        chunk.emit(Op::LoadLocal(*counter), *line);
+                        chunk.emit(
+                            match place {
+                                Place::Local(slot) => Op::StoreLocal(*slot),
+                                Place::Global(idx) => Op::StoreGlobal(*idx),
+                            },
+                            *line,
+                        );
+                    }
                 }
                 emit_block(chunk, body);
 
-                let done = if *inclusive {
-                    // Stepping only while strictly below the bound means the
-                    // increment can never overflow the type.
-                    chunk.emit(Op::LoadLocal(*counter), *line);
-                    chunk.emit(Op::LoadLocal(*bound), *line);
-                    chunk.emit(Op::Lt(*ty), *line);
-                    let done = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
-                    chunk.emit(Op::LoadLocal(*counter), *line);
-                    chunk.emit(Op::Const(one), *line);
-                    chunk.emit(Op::Add(*ty), *line);
-                    chunk.emit(Op::StoreLocal(*counter), *line);
-                    done
-                } else {
-                    // The last value is one below the bound, so stepping to the
-                    // bound itself is in range and the test comes after.
-                    chunk.emit(Op::LoadLocal(*counter), *line);
-                    chunk.emit(Op::Const(one), *line);
-                    chunk.emit(Op::Add(*ty), *line);
-                    chunk.emit(Op::StoreLocal(*counter), *line);
-                    chunk.emit(Op::LoadLocal(*counter), *line);
-                    chunk.emit(Op::LoadLocal(*bound), *line);
-                    chunk.emit(Op::Lt(*ty), *line);
-                    chunk.emit(Op::JumpIfFalse(u32::MAX), *line)
-                };
-                chunk.emit(Op::Jump(top), *line);
+                // Step, test and branch, in one instruction.
+                chunk.emit(
+                    Op::LoopStep { counter: step, bound: *bound, target: top, ty: *ty },
+                    *line,
+                );
 
                 let after = chunk.code.len() as u32;
                 chunk.patch_jump(skip, after);
-                chunk.patch_jump(done, after);
             }
 
             TStmt::If { arms, else_arm, line } => {

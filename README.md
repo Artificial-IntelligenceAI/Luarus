@@ -350,13 +350,15 @@ This found a real bug: the constant pool deduplicated with `==`, and IEEE says
 
 There is a loop benchmark against C, Rust, Go, Java, LuaJIT, Lua, NumPy and
 Python in [`bench/`](bench/README.md). The short version: on a loop the hardware
-caps — a dependent chain no compiler can reorder — Luarus is **21× slower than
+caps — a dependent chain no compiler can reorder — Luarus is **11× slower than
 C**, and every optimising compiler lands within 6% of each other because none of
 them can beat the latency. On a loop compilers *can* vectorise, the real gap
-shows: **345× slower than Rust**.
+shows: **153× slower than Rust**.
 
-Most of that is loop overhead rather than arithmetic. Seventeen instructions per
-iteration, of which two do the work.
+Both numbers used to be roughly twice that. A counting loop spent seventeen
+instructions per iteration on two instructions' worth of arithmetic; a fused
+`loop.step` and letting the target double as the counter brought it to seven,
+and specialising the integer case in the VM did as much again.
 
 ## Layout
 

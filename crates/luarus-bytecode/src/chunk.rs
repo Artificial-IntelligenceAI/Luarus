@@ -52,7 +52,7 @@ impl Chunk {
     /// out with a placeholder and is corrected once the destination is reached.
     pub fn patch_jump(&mut self, at: usize, target: u32) {
         match &mut self.code[at] {
-            Op::Jump(t) | Op::JumpIfFalse(t) => *t = target,
+            Op::Jump(t) | Op::JumpIfFalse(t) | Op::LoopStep { target: t, .. } => *t = target,
             other => panic!("tried to patch {other:?}, which is not a jump"),
         }
     }
@@ -118,6 +118,10 @@ fn show_op(chunk: &Chunk, op: Op) -> String {
             format!("{m:<14} {n}    -- ({name})")
         }
         Op::Jump(t) | Op::JumpIfFalse(t) => format!("{m:<14} {t}"),
+        Op::LoopStep { counter, bound, target, ty } => {
+            let name = chunk.local_names.get(counter as usize).cloned().unwrap_or_default();
+            format!("{}.{:<10} {counter} {bound} {target}  -- ({name})", m, ty.name())
+        }
         Op::LoadGlobal(n) | Op::StoreGlobal(n) => {
             let name = chunk.globals.get(n as usize).map(|g| g.name.clone()).unwrap_or_default();
             format!("{m:<14} {n}    -- ({name})")

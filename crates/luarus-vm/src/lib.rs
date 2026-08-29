@@ -106,6 +106,54 @@ impl<'a> Vm<'a> {
                 Op::Pop => {
                     self.pop()?;
                 }
+                Op::LoopStep { counter, bound, target, ty } => {
+                    let (ci, bi) = (counter as usize, bound as usize);
+                    if ci >= self.locals.len() || bi >= self.locals.len() {
+                        return Err(self.malformed("loop slot is out of range"));
+                    }
+
+                    // Almost every loop counts in a machine integer, and going
+                    // through the general arithmetic path for that costs more
+                    // than the rest of the instruction. `counter < bound` holds
+                    // whenever the step happens, and the bound fits the type, so
+                    // the increment cannot leave it.
+                    let stepped = match (&self.locals[ci], &self.locals[bi]) {
+                        (Some(Value::Int(c)), Some(Value::Int(b))) => {
+                            let (c, b) = (*c, *b);
+                            let go = c < b;
+                            if go {
+                                self.locals[ci] = Some(Value::Int(c + 1));
+                            }
+                            go
+                        }
+                        (Some(Value::Uint(c)), Some(Value::Uint(b))) => {
+                            let (c, b) = (*c, *b);
+                            let go = c < b;
+                            if go {
+                                self.locals[ci] = Some(Value::Uint(c + 1));
+                            }
+                            go
+                        }
+                        // Exact rationals, and anything a malformed chunk put
+                        // there, take the long way round.
+                        _ => {
+                            let current = self.local_value(counter)?;
+                            let limit = self.local_value(bound)?;
+                            if self.compare(Op::Lt(ty), current.clone(), limit, ty)? {
+                                let one = self.one_of(ty).ok_or_else(|| {
+                                    self.malformed(format!("cannot count in `{}`", ty.name()))
+                                })?;
+                                self.locals[ci] = Some(self.arith(Op::Add(ty), current, one, ty)?);
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    };
+                    if stepped {
+                        self.pc = self.jump_target(target)?;
+                    }
+                }
                 Op::RequireWhole(n) => {
                     let slot = self
                         .locals
@@ -213,6 +261,34 @@ impl<'a> Vm<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Read a local, or say which one was empty.
+    fn local_value(&self, n: u32) -> Result<Value, RuntimeError> {
+        self.locals
+            .get(n as usize)
+            .ok_or_else(|| self.malformed(format!("local slot {n} is out of range")))?
+            .clone()
+            .ok_or_else(|| {
+                let name = self.name_of_local(n);
+                self.err(
+                    Rule::AssignBeforeReading,
+                    format!("`({name})` is read before it is assigned"),
+                )
+            })
+    }
+
+    /// The value one, in whichever type a loop is counting.
+    fn one_of(&self, ty: RtType) -> Option<Value> {
+        if ty.is_unsigned_int() {
+            Some(Value::Uint(1))
+        } else if ty.is_signed_int() {
+            Some(Value::Int(1))
+        } else if ty == RtType::Er {
+            Some(Value::Er(Rc::new(luarus_num::Rational::one())))
+        } else {
+            None
+        }
     }
 
     /// Validate a jump destination, so a corrupt chunk cannot escape the code.

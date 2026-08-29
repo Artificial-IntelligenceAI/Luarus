@@ -904,3 +904,62 @@ fn a_loop_wants_to_or_times() {
     let d = diags("loop temp = '3' end");
     assert!(d[0].message.contains("expected `to` or `times`"), "{:?}", d[0].message);
 }
+
+// -------------------------------------------------- the loop's own machinery
+
+#[test]
+fn a_body_that_writes_the_target_does_not_derail_the_count() {
+    // The target normally doubles as the loop's counter, which saves a copy
+    // every iteration. A body that assigns to it must give that up, or the
+    // assignment would move the counter.
+    let src = "loop perm store-in i32 (i) = '0' to '5' { print[(i)] end set (i) = '100' end } \
+               print[\"|\" (i)] end";
+    assert_eq!(run(src), "012345|100");
+}
+
+#[test]
+fn a_nested_write_to_the_target_also_gives_up_the_alias() {
+    // The write is inside an `if`, so finding it means looking through blocks.
+    let src = "loop perm store-in i32 (i) = '0' to '4' { \
+                 print[(i)] end if (i) == '2' { set (i) = '9' end } } \
+               print[\"|\" (i)] end";
+    assert_eq!(run(src), "01234|4");
+}
+
+#[test]
+fn a_write_to_something_else_keeps_the_alias() {
+    let src = "var i32 (other) = '0' end \
+               loop perm store-in i32 (i) = '0' to '3' { set (other) = (i) end } \
+               print[(i) \"|\" (other)] end";
+    assert_eq!(run(src), "3|3");
+}
+
+#[test]
+fn an_inner_loop_writing_the_outer_target_is_noticed() {
+    let src = "loop perm store-in i32 (a) = '0' to '3' { \
+                 loop temp store-in i32 (b) = '0' to '1' { print[(a) (b)] end } } \
+               print[\"|\" (a)] end";
+    assert_eq!(run(src), "0001101120213031|3");
+}
+
+#[test]
+fn the_loop_tail_is_a_single_instruction() {
+    // The step, the test and the branch fused, so the per-iteration cost is the
+    // body plus one.
+    let chunk = luarus_compile::compile(
+        "loop temp store-in i32 (i) = '1' to '10' { print[(i)] end }",
+        "t.lrs",
+    )
+    .unwrap();
+    let steps = chunk.code.iter().filter(|op| matches!(op, luarus_bytecode::Op::LoopStep { .. })).count();
+    assert_eq!(steps, 1, "one loop, one step instruction");
+
+    // And with the target aliased, nothing copies it inside the loop.
+    let text = chunk.disassemble();
+    let top = text.find("loop.step").expect("a step");
+    let body: Vec<&str> = text[..top].lines().rev().take(3).collect();
+    assert!(
+        !body.iter().any(|l| l.contains("(%loop counter)")),
+        "the counter should not be touched inside the body:\n{text}"
+    );
+}
