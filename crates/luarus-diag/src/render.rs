@@ -33,15 +33,16 @@ pub fn render(src: &str, file: &str, d: &Diagnostic) -> String {
     let gutter = line.to_string();
     let pad = " ".repeat(gutter.len());
 
-    // Caret geometry is measured in characters, so an emoji in a name does not
-    // push the caret out of alignment.
+    // Caret geometry is laid out in terminal cells, not characters: a space is
+    // one cell but an emoji is two, so padding by character count would leave
+    // the caret short. The column above is still counted in characters.
     let lead = text
         .get(..d.span.start.saturating_sub(line_start))
-        .map(grapheme::count)
+        .map(grapheme::width)
         .unwrap_or(0);
     let width = src
         .get(d.span.start..d.span.end.min(line_start + text.len()))
-        .map(grapheme::count)
+        .map(grapheme::width)
         .unwrap_or(1)
         .max(1);
 

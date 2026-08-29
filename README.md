@@ -32,7 +32,8 @@ var i32 (🧑‍🧑‍🧒‍🧒)                  = '4'     end
 That last name is **one character**. Luarus counts characters the way a reader
 does — as grapheme clusters — so `🧑‍🧑‍🧒‍🧒` is one, exactly like `c`, even though it
 is seven Unicode scalars welded together with zero-width joiners. Error columns
-and caret widths are measured the same way.
+count characters this way; caret alignment counts terminal cells instead, since
+an emoji draws two cells wide where a space draws one.
 
 **2. Values live in quotes, and the type decides what they mean.** A literal has
 no type of its own. The same four characters are an integer, a float, or text

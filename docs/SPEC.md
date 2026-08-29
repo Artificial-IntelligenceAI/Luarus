@@ -11,8 +11,17 @@ scalars joined by zero-width joiners. Combining marks, skin-tone modifiers,
 variation selectors, regional-indicator flag pairs, Hangul jamo sequences and
 `CR LF` all count as one character with what they attach to.
 
-This is what error columns and caret widths are measured in, so a caret lands
-under what the eye sees. Segmentation follows the UAX #29 boundary rules.
+Segmentation follows the UAX #29 boundary rules.
+
+**Characters and cells are different measures**, and diagnostics use both. A
+column number counts characters, because a column says *which character*:
+`🧑‍🧑‍🧒‍🧒` advances it by one. Caret alignment counts terminal cells, because a
+caret is laid out on screen and an emoji draws two cells wide where a space
+draws one. Measuring the caret in characters leaves it short.
+
+The cell width of an emoji is not knowable from the text alone — it depends on
+whether the terminal and font ligate the sequence. Luarus assumes they do. Where
+they do not, a caret drifts left; nothing else is affected.
 
 ## 1. Lexical structure
 

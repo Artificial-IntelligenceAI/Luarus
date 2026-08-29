@@ -384,19 +384,22 @@ fn a_name_may_be_a_single_multi_scalar_character() {
 }
 
 #[test]
-fn carets_are_measured_in_characters_not_scalars() {
-    // `(🧑‍🧑‍🧒‍🧒)` is three characters, so the caret under it is three wide —
-    // even though the name is seven Unicode scalars.
+fn carets_are_laid_out_in_terminal_cells() {
+    // `(🧑‍🧑‍🧒‍🧒)` is three characters but four cells, because the emoji draws
+    // double width. The caret is laid out in cells so it lands under the name.
     let src = "var i32 (🧑‍🧑‍🧒‍🧒) = '1' end var i32 (🧑‍🧑‍🧒‍🧒) = '2' end";
     let text = luarus_diag::render(src, "t.lrs", &diags(src)[0]);
     let caret_line = text.lines().find(|l| l.contains('^')).expect("a caret line");
-    assert_eq!(caret_line.matches('^').count(), 3, "{text}");
+    assert_eq!(caret_line.matches('^').count(), 4, "{text}");
+    // ...and the padding before it is 31 cells, not the 30 characters.
+    let pad = caret_line.find('^').unwrap() - caret_line.find('|').unwrap() - 2;
+    assert_eq!(pad, 31, "{text}");
 }
 
 #[test]
 fn columns_count_characters_as_a_reader_would() {
-    // The second name starts after `var i32 (X) = '1' end var i32 ` — column 31
-    // only if the family emoji counted as one character.
+    // The column is a character index, not a cell offset: 31 only if the family
+    // emoji counted as one character.
     let src = "var i32 (🧑‍🧑‍🧒‍🧒) = '1' end var i32 (🧑‍🧑‍🧒‍🧒) = '2' end";
     let text = luarus_diag::render(src, "t.lrs", &diags(src)[0]);
     assert!(text.contains("t.lrs:1:31"), "{text}");
