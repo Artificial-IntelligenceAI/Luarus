@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/luarus-syntax",
+    "crates/luarus-bytecode",
+    "crates/luarus-compile",
+    "crates/luarus-vm",
+    "crates/luarus-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/Artificial-IntelligenceAI/Luarus"
+rust-version = "1.74"
+
+[workspace.dependencies]
+luarus-syntax = { path = "crates/luarus-syntax" }
+luarus-bytecode = { path = "crates/luarus-bytecode" }
+luarus-compile = { path = "crates/luarus-compile" }
+luarus-vm = { path = "crates/luarus-vm" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

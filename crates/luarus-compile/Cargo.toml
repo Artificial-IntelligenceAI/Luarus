@@ -1,0 +1,14 @@
+[package]
+name = "luarus-compile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+luarus-syntax.workspace = true
+luarus-bytecode.workspace = true
+
+[dev-dependencies]
+luarus-vm.workspace = true
