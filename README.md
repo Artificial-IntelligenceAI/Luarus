@@ -99,6 +99,33 @@ else
   print["grade f" \n] end }
 ```
 
+## Counting
+
+A loop is a **generator, not a control structure** — it has no body. It counts
+inclusively from one bound to the other, storing each value into its target as
+it goes, so a scalar target ends up holding the last one:
+
+```luarus
+loop perm store-in i32 (i) = '0' to '10' end
+print[(i)] end                                -- 10
+```
+
+`perm` is what keeps the target alive after the loop; without it the name is
+never visible at all. Most languages decide that for you — Python leaks the
+counter, Rust and Lua scope it away — and here it is a word you type.
+
+The bounds are ordinary expressions and take their type from the target, which
+must be an integer, since counting steps by exactly one. Counting down is an
+*empty* range rather than a reversed one, and an empty range stores nothing, so
+reading the target afterwards reports that it was never assigned.
+
+A loop reaches the top of its type safely: the step happens only while the
+counter is strictly below the bound, so `'250' to '255'` on a `u8` never
+computes 256.
+
+When arrays land, an array target will collect every value rather than only the
+last.
+
 ## Typed literals
 
 A literal normally takes its type from context. It can also state it outright,

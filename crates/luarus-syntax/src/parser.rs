@@ -211,6 +211,9 @@ impl Parser {
         if self.eat_word("print") {
             return self.print_stmt(start);
         }
+        if self.eat_word("loop") {
+            return self.loop_stmt(start);
+        }
 
         let t = self.peek().clone();
         if t.tok == Tok::RBrace {
@@ -241,6 +244,43 @@ impl Parser {
         let value = self.expr()?;
         let span = start.to(value.span());
         Ok(Stmt::Var { modifier, ty, name, value, span })
+    }
+
+    /// `loop perm? store-in <type> (<name>) = <from> to <to>`.
+    fn loop_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
+        let perm = self.eat_word("perm");
+
+        if !self.eat_word("store-in") {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::StatementForm, format!("expected `store-in`, found {}", t.tok.describe()))
+                .with_help("a loop says where its values go: `loop store-in i32 (i) = '0' to '10' end`"));
+        }
+
+        let ty = match self.peek().tok.clone() {
+            Tok::Word(text) => {
+                let span = self.bump().span;
+                TypeRef { text, span }
+            }
+            other => {
+                let span = self.peek().span;
+                return Err(self
+                    .err(span, Rule::TypesMustExist, format!("expected a type after `store-in`, found {}", other.describe())));
+            }
+        };
+        let name = self.ident("after the type in a loop")?;
+        self.expect_assign()?;
+        let from = self.expr()?;
+
+        if !self.eat_word("to") {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::StatementForm, format!("expected `to`, found {}", t.tok.describe()))
+                .with_help("a loop counts between two bounds: `= '0' to '10'`"));
+        }
+        let to = self.expr()?;
+        let span = start.to(to.span());
+        Ok(Stmt::Loop { perm, ty, name, from, to, span })
     }
 
     /// `print [ item item ... ]`. Items are juxtaposed, not separated.

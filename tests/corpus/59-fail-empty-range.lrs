@@ -1,0 +1,4 @@
+-- An empty range stores nothing, so the target was never assigned and reading
+-- it is an error rather than a silent zero.
+loop perm store-in i32 (i) = '10' to '0' end
+print[(i) \n] end

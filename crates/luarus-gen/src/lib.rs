@@ -295,7 +295,8 @@ impl Gen<'_> {
                 let name = self.declare(ty);
                 format!("{modifier}var {} ({name}) = {value}", ty.name())
             }
-            5..=6 => {
+            5 => self.loop_stmt(),
+            6 => {
                 // Assignment, if there is anything to assign to.
                 let live: Vec<Var> = self.visible().cloned().collect();
                 if live.is_empty() {
@@ -307,6 +308,42 @@ impl Gen<'_> {
             }
             _ => self.print_stmt(),
         }
+    }
+
+    /// A counting loop. Bounds are kept to small literals so a generated
+    /// program cannot spend the afternoon counting.
+    fn loop_stmt(&mut self) -> String {
+        let ints = [
+            RtType::I32,
+            RtType::I64,
+            RtType::I8,
+            RtType::I16,
+            RtType::U8,
+            RtType::U32,
+            RtType::U64,
+        ];
+        let ty = *self.rng.pick(&ints);
+        let (lo, hi) = if ty.is_unsigned_int() { (0, 9) } else { (-5, 9) };
+        let from = self.rng.between(lo, hi);
+        // Sometimes count backwards, which is an empty range and leaves the
+        // target unassigned — worth generating, since reading it must then fail
+        // the same way on both paths. The upper bound stays inside the type:
+        // an unsigned loop cannot count down past zero.
+        let to = if self.rng.chance(1, 8) && from > lo {
+            self.rng.between(lo, from - 1)
+        } else {
+            self.rng.between(from, hi)
+        };
+
+        let perm = self.rng.chance(3, 4);
+        let name = if perm {
+            self.declare(ty)
+        } else {
+            // Not declared anywhere: without `perm` the name is never visible.
+            self.fresh_name()
+        };
+        let keyword = if perm { "loop perm" } else { "loop" };
+        format!("{keyword} store-in {} ({name}) = '{from}' to '{to}'", ty.name())
     }
 
     fn print_stmt(&mut self) -> String {

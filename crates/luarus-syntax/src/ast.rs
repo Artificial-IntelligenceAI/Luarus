@@ -133,6 +133,21 @@ pub enum Stmt {
         else_arm: Vec<Stmt>,
         span: Span,
     },
+    /// `loop perm store-in i32 (i) = '0' to '10'`.
+    ///
+    /// A generator rather than a control structure: it has no body. It counts
+    /// from one bound to the other, inclusive at both ends, storing each value
+    /// into its target as it goes — so a scalar target holds the last value.
+    Loop {
+        /// `perm` keeps the target alive after the loop. Without it the name is
+        /// never visible at all.
+        perm: bool,
+        ty: TypeRef,
+        name: Name,
+        from: Expr,
+        to: Expr,
+        span: Span,
+    },
     Print {
         /// Juxtaposed items, written back to back inside `[ ... ]`.
         /// `print` writes exactly these and nothing else — no separators and no
@@ -148,7 +163,8 @@ impl Stmt {
             Stmt::Var { span, .. }
             | Stmt::Assign { span, .. }
             | Stmt::Print { span, .. }
-            | Stmt::If { span, .. } => *span,
+            | Stmt::If { span, .. }
+            | Stmt::Loop { span, .. } => *span,
         }
     }
 }

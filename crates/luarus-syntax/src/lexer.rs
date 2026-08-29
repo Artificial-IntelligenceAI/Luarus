@@ -316,9 +316,16 @@ impl<'a> Lexer<'a> {
         while let Some(b) = self.peek() {
             if b.is_ascii_alphanumeric() || b == b'_' {
                 self.pos += 1;
-            } else {
-                break;
+                continue;
             }
+            // A hyphen joins two words, so `store-in` is one keyword. It only
+            // does so between letters, which keeps `'5'-'3'` and `i32 -'1'`
+            // reading as subtraction and negation.
+            if b == b'-' && self.peek2().is_some_and(|c| c.is_ascii_alphabetic()) {
+                self.pos += 1;
+                continue;
+            }
+            break;
         }
         if self.pos == start {
             let ch = self.src[start..].chars().next().unwrap();

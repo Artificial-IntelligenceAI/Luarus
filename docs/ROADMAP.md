@@ -5,9 +5,10 @@ part of a pipeline over a large one. Everything below is open for design.
 
 ## Next
 
-**Loops.** `if`/`else` is in; blocks are braced, so a loop has its syntax
-waiting for it. The open questions are `while` versus `for` versus both, and
-what `break` looks like.
+**Iteration with a body.** `loop` counts and stores, but nothing runs per
+value — there is no way yet to *do* something eleven times. Whether that is a
+body on `loop`, a separate construct, or something that falls out of arrays is
+open. `break` and `continue` have no meaning until it exists.
 
 **Functions.** Parameter and return annotations, a call syntax that does not
 collide with `(name)` or with print's `[ ]`, and frames in the VM. This is the

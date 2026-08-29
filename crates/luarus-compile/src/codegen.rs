@@ -49,6 +49,51 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::Write(item.ty()), *line);
                 }
             }
+            TStmt::Loop { place, ty, from, to, counter, bound, line } => {
+                let one = chunk.add_const(if ty.is_unsigned_int() {
+                    luarus_bytecode::Const::Uint(1)
+                } else {
+                    luarus_bytecode::Const::Int(1)
+                });
+
+                emit_expr(chunk, from, *line);
+                chunk.emit(Op::StoreLocal(*counter), *line);
+                emit_expr(chunk, to, *line);
+                chunk.emit(Op::StoreLocal(*bound), *line);
+
+                // An empty range stores nothing at all, so the target is left
+                // unassigned and reading it says so.
+                chunk.emit(Op::LoadLocal(*counter), *line);
+                chunk.emit(Op::LoadLocal(*bound), *line);
+                chunk.emit(Op::Le(*ty), *line);
+                let skip = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
+
+                let top = chunk.code.len() as u32;
+                chunk.emit(Op::LoadLocal(*counter), *line);
+                let store = match place {
+                    Place::Local(slot) => Op::StoreLocal(*slot),
+                    Place::Global(idx) => Op::StoreGlobal(*idx),
+                };
+                chunk.emit(store, *line);
+
+                // Stepping only when the counter is strictly below the bound
+                // means the increment can never overflow the type.
+                chunk.emit(Op::LoadLocal(*counter), *line);
+                chunk.emit(Op::LoadLocal(*bound), *line);
+                chunk.emit(Op::Lt(*ty), *line);
+                let done = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
+
+                chunk.emit(Op::LoadLocal(*counter), *line);
+                chunk.emit(Op::Const(one), *line);
+                chunk.emit(Op::Add(*ty), *line);
+                chunk.emit(Op::StoreLocal(*counter), *line);
+                chunk.emit(Op::Jump(top), *line);
+
+                let after = chunk.code.len() as u32;
+                chunk.patch_jump(skip, after);
+                chunk.patch_jump(done, after);
+            }
+
             TStmt::If { arms, else_arm, line } => {
                 // Each arm tests, runs, and jumps clear of the rest. Jump
                 // destinations are unknown when the jumps are emitted, so they

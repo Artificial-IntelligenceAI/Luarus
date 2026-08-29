@@ -58,3 +58,9 @@ else
 -- A literal can state its own type instead of taking one from context, which
 -- lets it stand where nothing would supply one.
 print[i32 '42' " and " f64 '1.5' \n] end
+
+-- A loop is a generator rather than a control structure: it has no body. It
+-- counts inclusively and stores each value as it goes, so a scalar target ends
+-- holding the last one. `perm` is what keeps that target alive afterwards.
+loop perm store-in i32 (counted) = '0' to '10' end
+print["counted up to " (counted) \n] end

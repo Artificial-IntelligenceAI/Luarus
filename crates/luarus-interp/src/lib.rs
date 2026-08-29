@@ -110,6 +110,26 @@ impl Interp<'_> {
                 Ok(())
             }
 
+            TStmt::Loop { place, ty, from, to, line, .. } => {
+                // Counting directly, with none of the jumps and hidden slots the
+                // compiled form needs — which is the point of the oracle.
+                let from = self.eval(from, *line)?;
+                let to = self.eval(to, *line)?;
+                let (Some(mut i), Some(stop)) = (as_int(&from), as_int(&to)) else {
+                    return Err(err(Rule::BytecodeIsWellFormed, *line, "loop bounds are not integers"));
+                };
+                let unsigned = ty.is_unsigned_int();
+                while i <= stop {
+                    let v = if unsigned { Value::Uint(i as u64) } else { Value::Int(i as i64) };
+                    match place {
+                        Place::Local(n) => self.locals[*n as usize] = Some(v),
+                        Place::Global(n) => self.globals[*n as usize] = Some(v),
+                    }
+                    i += 1;
+                }
+                Ok(())
+            }
+
             TStmt::If { arms, else_arm, line } => {
                 for TIfArm { cond, body } in arms {
                     let Value::Bool(taken) = self.eval(cond, *line)? else {

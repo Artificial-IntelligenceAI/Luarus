@@ -30,6 +30,8 @@ pub enum Rule {
     BlocksAreBraced,
     /// A condition is a bool; there is no truthiness.
     ConditionsAreBool,
+    /// A loop counts over an integer type.
+    LoopsCountIntegers,
 
     // ---- types
     /// A literal takes its type from its context.
@@ -77,6 +79,7 @@ impl Rule {
             Rule::LexicalForm => "lexical-form",
             Rule::BlocksAreBraced => "blocks-are-braced",
             Rule::ConditionsAreBool => "conditions-are-bool",
+            Rule::LoopsCountIntegers => "loops-count-integers",
             Rule::LiteralsNeedAType => "literals-need-a-type",
             Rule::ValuesMustFit => "values-must-fit",
             Rule::NoImplicitConversion => "no-implicit-conversion",
@@ -116,6 +119,7 @@ impl Rule {
             Rule::ConditionsAreBool => {
                 "a condition is a `bool`; no other type is true or false in Luarus"
             }
+            Rule::LoopsCountIntegers => "a loop counts over an integer type",
             Rule::LiteralsNeedAType => {
                 "a literal has no type of its own and takes one from its context, or says it \
                  outright as in `f16 '5'`"
@@ -151,6 +155,7 @@ impl Rule {
         Rule::LexicalForm,
         Rule::BlocksAreBraced,
         Rule::ConditionsAreBool,
+        Rule::LoopsCountIntegers,
         Rule::LiteralsNeedAType,
         Rule::ValuesMustFit,
         Rule::NoImplicitConversion,
@@ -182,6 +187,6 @@ mod tests {
     #[test]
     fn every_rule_is_listed_in_all() {
         // ALL is hand-written, so guard against a rule being added without it.
-        assert_eq!(Rule::ALL.len(), 23);
+        assert_eq!(Rule::ALL.len(), 24);
     }
 }

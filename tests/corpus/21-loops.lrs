@@ -1,0 +1,23 @@
+-- A loop is a generator, not a control structure: it has no body. It counts
+-- inclusively from one bound to the other, storing each value as it goes, so a
+-- scalar target ends up holding the last one.
+loop perm store-in i32 (i) = '0' to '10' end
+print[(i) \n] end
+
+-- One value.
+loop perm store-in i32 (single) = '5' to '5' end
+print[(single) \n] end
+
+-- Right up to the top of the type, without the step overflowing it.
+loop perm store-in u8 (top) = '250' to '255' end
+loop perm store-in i8 (bottom) = '-128' to '127' end
+print[(top) " " (bottom) \n] end
+
+-- Bounds are expressions like any other, and take their type from the target.
+var i32 (n) = '3' end
+loop perm store-in i32 (computed) = (n) to | (n) * '2' | end
+print[(computed) \n] end
+
+-- Without `perm` the name is never visible, so the loop has no effect at all.
+loop store-in i32 (invisible) = '0' to '3' end
+print["still here" \n] end

@@ -601,3 +601,80 @@ fn a_comparison_of_two_typed_literals_needs_no_context() {
     // This is what `literals-need-a-type` used to reject outright.
     assert_eq!(run("var bool (b) = i32 '1' == i32 '2' end print[(b)] end"), "false");
 }
+
+// ------------------------------------------------------------------- loops
+
+#[test]
+fn runs_the_worked_loop_example() {
+    assert_eq!(run("loop perm store-in i32 (i) = '0' to '10' end print[(i)] end"), "10");
+}
+
+#[test]
+fn a_loop_is_inclusive_at_both_ends() {
+    // Eleven values, 0 through 10, so the target ends on 10 rather than 9 or 11.
+    assert_eq!(run("loop perm store-in i32 (i) = '0' to '10' end print[(i)] end"), "10");
+    assert_eq!(run("loop perm store-in i32 (i) = '5' to '5' end print[(i)] end"), "5");
+}
+
+#[test]
+fn a_loop_reaches_the_top_of_its_type_without_overflowing() {
+    // The step happens only while the counter is strictly below the bound, so
+    // counting up to the maximum never computes maximum + 1.
+    assert_eq!(run("loop perm store-in u8 (i) = '250' to '255' end print[(i)] end"), "255");
+    assert_eq!(run("loop perm store-in i8 (i) = '-128' to '127' end print[(i)] end"), "127");
+    assert_eq!(run("loop perm store-in i8 (i) = '0' to '127' end print[(i)] end"), "127");
+}
+
+#[test]
+fn an_empty_range_stores_nothing() {
+    // Counting down is empty rather than reversed, so the target is never
+    // assigned and reading it says so.
+    let e = runtime_error("loop perm store-in i32 (i) = '10' to '0' end print[(i)] end");
+    assert_eq!(e.rule, Some(Rule::AssignBeforeReading));
+}
+
+#[test]
+fn perm_is_what_keeps_the_target_alive() {
+    assert!(errors("loop store-in i32 (i) = '0' to '10' end print[(i)] end")[0]
+        .contains("`(i)` is not declared"));
+}
+
+#[test]
+fn loop_bounds_are_ordinary_expressions() {
+    let src = "var i32 (n) = '3' end \
+               loop perm store-in i32 (i) = (n) to | (n) * '2' | end print[(i)] end";
+    assert_eq!(run(src), "6");
+}
+
+#[test]
+fn a_loop_counts_only_over_integers() {
+    let d = diags("loop perm store-in f64 (i) = '0' to '10' end");
+    assert_eq!(d[0].rule, Rule::LoopsCountIntegers);
+    assert!(d[0].message.contains("`f64`"), "{:?}", d[0].message);
+    assert_eq!(diags("loop perm store-in str (i) = '0' to '10' end")[0].rule, Rule::LoopsCountIntegers);
+}
+
+#[test]
+fn a_loop_cannot_count_from_itself() {
+    // The bounds are checked before the name is bound.
+    assert!(errors("loop perm store-in i32 (i) = (i) to '10' end")[0].contains("not declared"));
+}
+
+#[test]
+fn a_loop_target_may_not_shadow_a_visible_name() {
+    assert!(errors("var i32 (n) = '1' end loop perm store-in i32 (n) = '0' to '5' end")[0]
+        .contains("already declared"));
+}
+
+#[test]
+fn store_in_is_one_keyword_and_a_hyphen_is_still_a_minus() {
+    // The hyphen joins two letters, so subtraction and negation are untouched.
+    assert_eq!(run("var i32 (a) = '7'-'3' end print[(a)] end"), "4");
+    assert_eq!(run("var i32 (b) = -'3' end print[(b)] end"), "-3");
+    assert!(errors("loop perm i32 (i) = '0' to '3' end")[0].contains("expected `store-in`"));
+}
+
+#[test]
+fn a_missing_to_is_reported() {
+    assert!(errors("loop perm store-in i32 (i) = '0' '3' end")[0].contains("expected `to`"));
+}

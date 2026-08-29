@@ -77,7 +77,10 @@ quotes. A bare escape is always `str`, whatever the surrounding context, so
 
 ### 1.4 Words
 
-A bare word is a run of ASCII letters, digits and `_`. Words are keywords
+A bare word is a run of ASCII letters, digits and `_`. A hyphen also joins two
+words into one, so `store-in` is a single keyword; it does so only between
+letters, which leaves `'5'-'3'` and `-'1'` reading as subtraction and negation.
+Words are keywords
 (`var`, `set`, `print`, `end`, `global`, `pub`) or type names. Because every
 user-chosen name is parenthesised, keywords are never in conflict with names: a
 variable may legitimately be called `(end)`.
@@ -173,7 +176,44 @@ Every arm is checked, whether or not it can run.
 closing brace. Since a name is declared once, an inner declaration may not
 shadow a visible outer one either.
 
-### 2.4 Print
+### 2.4 Loop
+
+```
+loop := 'loop' 'perm'? 'store-in' type identifier '=' expression 'to' expression
+```
+
+A loop is a **generator, not a control structure**: it has no body. It counts
+from the first bound to the second, **inclusive at both ends**, storing each
+value into its target as it goes. A scalar target therefore ends up holding the
+last value.
+
+```luarus
+loop perm store-in i32 (i) = '0' to '10' end   -- eleven values, 0 through 10
+print[(i)] end                                 -- 10
+```
+
+The target's type must be an **integer**: counting steps by exactly one, which
+only the integer types do exactly.
+
+The bounds are ordinary expressions, checked against the target's type. They are
+checked *before* the name is bound, so a loop cannot count from itself.
+
+**`perm` controls the target's lifetime.** With it, the name is declared in the
+enclosing scope and outlives the loop; without it, the name is never visible
+anywhere, and the loop has no observable effect at all.
+
+**An empty range stores nothing.** Counting down is empty rather than reversed,
+so after `'10' to '0'` the target has never been assigned and reading it is a
+runtime error. There is no step and no direction; a loop only counts up.
+
+A loop never overflows its own type. The step is taken only while the counter is
+strictly below the bound, so counting to a type's maximum never computes one
+past it.
+
+When arrays exist, an array target will collect every value rather than only the
+last.
+
+### 2.5 Print
 
 ```
 print := 'print' '[' expression* ']'
@@ -305,11 +345,11 @@ error[values-must-fit]: `300` is out of range for `u8`
 The `message` describes this failure; the `rule` states what always holds; the
 `help` suggests a fix. The rule slug is stable and may be relied on.
 
-`luarus rules` prints the set. There are twenty-three, in four groups: form
+`luarus rules` prints the set. There are twenty-four, in four groups: form
 (`names-are-parenthesised`, `values-are-quoted`, `end-closes-a-chain`,
 `statement-form`, `print-takes-brackets`, `groups-are-piped`,
 `comparisons-do-not-chain`, `escapes-are-text`, `lexical-form`,
-`blocks-are-braced`, `conditions-are-bool`), types
+`blocks-are-braced`, `conditions-are-bool`, `loops-count-integers`), types
 (`literals-need-a-type`, `values-must-fit`, `no-implicit-conversion`,
 `types-must-exist`, `arithmetic-is-numeric`, `unsigned-is-never-negative`),
 names (`names-must-be-declared`, `names-are-declared-once`), and run time
@@ -350,6 +390,6 @@ output.
 
 ## 9. Not yet in the language
 
-Loops, functions, records, arrays, maps, modules and imports, generics,
+Functions, records, arrays, maps, modules and imports, generics,
 explicit conversions, string operations beyond comparison and printing, and any
 standard library.

@@ -63,6 +63,17 @@ pub enum TStmt {
     Store { place: Place, value: TExpr, line: u32 },
     Print { items: Vec<TExpr>, line: u32 },
     If { arms: Vec<TIfArm>, else_arm: Vec<TStmt>, line: u32 },
+    /// Count from `from` to `to` inclusive, storing each value into `place`.
+    /// `counter` and `bound` are hidden slots the loop needs to do that.
+    Loop {
+        place: Place,
+        ty: RtType,
+        from: TExpr,
+        to: TExpr,
+        counter: u32,
+        bound: u32,
+        line: u32,
+    },
 }
 
 /// A whole checked program, ready for code generation.
@@ -189,6 +200,55 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::Print { items: checked, line })
             }
 
+            Stmt::Loop { perm, ty, name, from, to, .. } => {
+                let declared = RtType::from_name(&ty.text).ok_or_else(|| {
+                    Diagnostic::new(ty.span, Rule::TypesMustExist, format!("unknown type `{}`", ty.text))
+                })?;
+                if !declared.is_int() {
+                    return Err(Diagnostic::new(
+                        ty.span,
+                        Rule::LoopsCountIntegers,
+                        format!("a loop cannot count over `{}`", declared.name()),
+                    )
+                    .with_help("counting steps by one, which only the integer types do exactly"));
+                }
+
+                // Bounds are checked before the name exists, so a loop cannot
+                // count from itself.
+                let from = self.check(from, declared)?;
+                let to = self.check(to, declared)?;
+
+                if *perm {
+                    if let Some(prev) = self.find(&name.text) {
+                        let (line, _) = line_col(self.src, prev.declared_at.start);
+                        return Err(Diagnostic::new(
+                            name.span,
+                            Rule::NamesAreDeclaredOnce,
+                            format!("`({})` is already declared", name.text),
+                        )
+                        .with_help(format!("the first declaration is on line {line}")));
+                    }
+                }
+
+                let slot = self.out.locals.len() as u32;
+                self.out.locals.push(name.text.clone());
+                let place = Place::Local(slot);
+
+                // Without `perm` the slot still exists — the loop writes to it —
+                // but the name is never bound, so nothing can read it.
+                if *perm {
+                    self.scopes.last_mut().expect("a scope is open").insert(
+                        name.text.clone(),
+                        Binding { place, ty: declared, declared_at: name.span },
+                    );
+                }
+
+                let counter = self.hidden_slot("loop counter");
+                let bound = self.hidden_slot("loop bound");
+                let line = self.line(stmt.span());
+                Ok(TStmt::Loop { place, ty: declared, from, to, counter, bound, line })
+            }
+
             Stmt::If { arms, else_arm, .. } => {
                 let mut checked = Vec::with_capacity(arms.len());
                 for arm in arms {
@@ -227,6 +287,13 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::If { arms: checked, else_arm, line })
             }
         }
+    }
+
+    /// A slot with no name in any scope, for a loop's own bookkeeping.
+    fn hidden_slot(&mut self, label: &str) -> u32 {
+        let slot = self.out.locals.len() as u32;
+        self.out.locals.push(format!("%{label}"));
+        slot
     }
 
     /// Look a name up from the innermost scope outwards.
