@@ -195,6 +195,7 @@ cargo build --release
 | crate | contents |
 | --- | --- |
 | `luarus-diag` | spans, the rule set, diagnostic rendering, grapheme segmentation |
+| `luarus-heap` | the object heap: generational handles, mark-sweep collection |
 | `luarus-syntax` | lexer, AST, parser |
 | `luarus-bytecode` | value types, instructions, chunks, the `.lrb` format, `f16` |
 | `luarus-compile` | type checker and code generation |
@@ -208,8 +209,8 @@ No third-party dependencies — the whole toolchain is `std` only.
 v0.1 is a complete pipeline over a deliberately small language: declarations,
 assignment, chained statements, `print`, arithmetic, and comparison. Control flow, functions,
 records and modules are not implemented yet. See [`docs/SPEC.md`](docs/SPEC.md)
-for the language as it currently stands and [`docs/ROADMAP.md`](docs/ROADMAP.md)
-for what comes next.
+for the language as it currently stands, [`docs/MEMORY.md`](docs/MEMORY.md) for
+the memory model, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next.
 
 ## Licence
 

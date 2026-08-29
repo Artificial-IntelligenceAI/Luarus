@@ -19,7 +19,9 @@ force real nesting, shadowing rules, and slot reuse.
 ## After that
 
 **Records.** Nominal or structural is still undecided; it is the biggest
-remaining type-system choice.
+remaining type-system choice. It now also gates the memory model: `luarus-heap`
+is built and tested but has nothing to hold until a record type exists. See
+[MEMORY.md](MEMORY.md).
 
 **Arrays and maps**, with the index syntax settled against `[ ]`, which print
 already uses.
@@ -34,6 +36,10 @@ being one.
 **A standard library**, and with it the question of how Luarus calls out to Rust.
 String length and indexing will need the grapheme segmentation in `luarus-diag`
 promoted to a real part of the language rather than a diagnostics helper.
+
+**Memory, once records exist.** Wiring the heap into the VM, deciding what
+triggers a collection, choosing the syntax for `free` and the rule its misuse
+cites, and settling whether strings move onto the heap or stay refcounted.
 
 ## Deliberately open
 

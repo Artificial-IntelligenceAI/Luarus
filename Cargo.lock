@@ -31,6 +31,10 @@ name = "luarus-diag"
 version = "0.1.0"
 
 [[package]]
+name = "luarus-heap"
+version = "0.1.0"
+
+[[package]]
 name = "luarus-syntax"
 version = "0.1.0"
 dependencies = [
