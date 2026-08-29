@@ -42,6 +42,7 @@ const TYPES: &[RtType] = &[
     RtType::I16,
     RtType::F32,
     RtType::F16,
+    RtType::Er,
 ];
 
 /// Names that stress the lexer rather than the type checker.
@@ -141,6 +142,11 @@ impl Gen<'_> {
         match ty {
             RtType::Bool => if self.rng.chance(1, 2) { "true" } else { "false" }.to_string(),
             RtType::Nil => "nil".to_string(),
+            // Exact rationals: integers, decimals and fractions all read back.
+            RtType::Er => {
+                let v = ["0", "1", "-1", "0.1", "1/3", "-2/7", "1.5", "22/7", "3"];
+                self.rng.pick(&v).to_string()
+            }
             RtType::Str => {
                 let words = ["a", "hi", "luarus", "", "x y", "🎯", "tab\\there"];
                 self.rng.pick(&words).to_string()
@@ -335,6 +341,8 @@ impl Gen<'_> {
             self.rng.between(from, hi)
         };
 
+        // Half the loops count a range, half count a number of times.
+        let times_form = self.rng.chance(1, 2);
         let pad = "  ".repeat(depth);
         let perm = self.rng.chance(1, 2);
         let keyword = match (perm, self.rng.chance(1, 2)) {
@@ -357,7 +365,13 @@ impl Gen<'_> {
             None
         };
         let clause = target.as_ref().map(|(_, c)| c.clone()).unwrap_or_default();
-        let header = format!("{pad}{keyword}{clause} = '{from}' to '{to}'");
+        let header = if times_form {
+            // A count is never negative, whatever the target type allows.
+            let n = self.rng.between(0, 6);
+            format!("{pad}{keyword}{clause} = '{n}' times")
+        } else {
+            format!("{pad}{keyword}{clause} = '{from}' to '{to}'")
+        };
 
         if !with_body {
             return format!("{header} end\n");

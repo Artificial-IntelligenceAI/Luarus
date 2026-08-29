@@ -144,8 +144,7 @@ pub enum Stmt {
         perm: bool,
         /// `None` when there is no `store-in` clause, so nothing is caught.
         target: Option<(TypeRef, Name)>,
-        from: Expr,
-        to: Expr,
+        range: LoopRange,
         /// Empty when the loop is written with `end` rather than braces.
         body: Vec<Stmt>,
         span: Span,
@@ -169,6 +168,15 @@ impl Stmt {
             | Stmt::Loop { span, .. } => *span,
         }
     }
+}
+
+/// How a loop says which values to count.
+#[derive(Clone, Debug)]
+pub enum LoopRange {
+    /// `= from to to` — inclusive at both ends.
+    Between { from: Expr, to: Expr },
+    /// `= n times` — `n` values, counting from zero, so the last is `n - 1`.
+    Times(Expr),
 }
 
 /// One condition and the statements it guards.

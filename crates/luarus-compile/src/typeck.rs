@@ -71,6 +71,8 @@ pub enum TStmt {
         ty: RtType,
         from: TExpr,
         to: TExpr,
+        /// `to` counts up to and including the bound; `times` stops before it.
+        inclusive: bool,
         body: Vec<TStmt>,
         counter: u32,
         bound: u32,
@@ -202,10 +204,12 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::Print { items: checked, line })
             }
 
-            Stmt::Loop { perm, target, from, to, body, .. } => {
+            Stmt::Loop { perm, target, range, body, .. } => {
+                use luarus_syntax::ast::LoopRange;
                 // With no `store-in` clause there is no annotation to read the
-                // bounds as, so their own type is used, and `i64` when even they
-                // do not say.
+                // bounds as, so their own type is used. Failing that, a count is
+                // never negative and gets `u64`, while a pair of bounds gets
+                // `i64` so it can start below zero.
                 let declared = match target {
                     Some((ty, _)) => RtType::from_name(&ty.text).ok_or_else(|| {
                         Diagnostic::new(
@@ -214,14 +218,20 @@ impl<'a> Checker<'a> {
                             format!("unknown type `{}`", ty.text),
                         )
                     })?,
-                    None => self
-                        .probe(from)
-                        .or_else(|| self.probe(to))
-                        .unwrap_or(RtType::I64),
+                    None => match range {
+                        LoopRange::Between { from, to } => {
+                            self.probe(from).or_else(|| self.probe(to)).unwrap_or(RtType::I64)
+                        }
+                        LoopRange::Times(n) => self.probe(n).unwrap_or(RtType::U64),
+                    },
                 };
 
+                let range_span = match range {
+                    LoopRange::Between { from, .. } => from.span(),
+                    LoopRange::Times(n) => n.span(),
+                };
                 if !declared.is_int() {
-                    let span = target.as_ref().map(|(t, _)| t.span).unwrap_or_else(|| from.span());
+                    let span = target.as_ref().map(|(t, _)| t.span).unwrap_or(range_span);
                     return Err(Diagnostic::new(
                         span,
                         Rule::LoopsCountIntegers,
@@ -232,8 +242,19 @@ impl<'a> Checker<'a> {
 
                 // Bounds are checked before the name exists, so a loop cannot
                 // count from itself.
-                let from = self.check(from, declared)?;
-                let to = self.check(to, declared)?;
+                let (from, to, inclusive) = match range {
+                    LoopRange::Between { from, to } => {
+                        (self.check(from, declared)?, self.check(to, declared)?, true)
+                    }
+                    LoopRange::Times(n) => {
+                        let zero = if declared.is_unsigned_int() {
+                            Const::Uint(0)
+                        } else {
+                            Const::Int(0)
+                        };
+                        (TExpr::Const(zero, declared), self.check(n, declared)?, false)
+                    }
+                };
 
                 let place = match target {
                     None => None,
@@ -273,7 +294,17 @@ impl<'a> Checker<'a> {
                 self.scopes.pop();
 
                 let line = self.line(stmt.span());
-                Ok(TStmt::Loop { place, ty: declared, from, to, body, counter, bound, line })
+                Ok(TStmt::Loop {
+                    place,
+                    ty: declared,
+                    from,
+                    to,
+                    inclusive,
+                    body,
+                    counter,
+                    bound,
+                    line,
+                })
             }
 
             Stmt::If { arms, else_arm, .. } => {

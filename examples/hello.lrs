@@ -78,3 +78,14 @@ loop temp store-in i32 (n) = '1' to '5' {
   else
     print[(n) " is small" \n] end }
 }
+
+-- `n times` counts n values from zero, so it needs no bounds and no type:
+-- `times` is the annotation.
+loop temp = '3' times {
+  print["again" \n] end }
+
+-- `er` is an exact rational: unbounded, and it never rounds.
+var f64 (approx) = '0.1' end
+var er  (exact)  = '0.1' end
+print["f64 gives " | (approx) + '0.2' | ", er gives " | (exact) + '0.2' | \n] end
+print["a third times three is exactly " | er '1/3' * '3' | \n] end

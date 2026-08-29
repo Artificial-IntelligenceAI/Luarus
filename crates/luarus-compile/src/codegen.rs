@@ -49,7 +49,7 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::Write(item.ty()), *line);
                 }
             }
-            TStmt::Loop { place, ty, from, to, body, counter, bound, line } => {
+            TStmt::Loop { place, ty, from, to, inclusive, body, counter, bound, line } => {
                 let one = chunk.add_const(if ty.is_unsigned_int() {
                     luarus_bytecode::Const::Uint(1)
                 } else {
@@ -62,10 +62,12 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                 chunk.emit(Op::StoreLocal(*bound), *line);
 
                 // An empty range stores nothing at all, so the target is left
-                // unassigned and reading it says so.
+                // unassigned and reading it says so. `to` includes its bound,
+                // `times` stops before it.
+                let guard = if *inclusive { Op::Le(*ty) } else { Op::Lt(*ty) };
                 chunk.emit(Op::LoadLocal(*counter), *line);
                 chunk.emit(Op::LoadLocal(*bound), *line);
-                chunk.emit(Op::Le(*ty), *line);
+                chunk.emit(guard, *line);
                 let skip = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
 
                 let top = chunk.code.len() as u32;
@@ -81,17 +83,30 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                 }
                 emit_block(chunk, body);
 
-                // Stepping only when the counter is strictly below the bound
-                // means the increment can never overflow the type.
-                chunk.emit(Op::LoadLocal(*counter), *line);
-                chunk.emit(Op::LoadLocal(*bound), *line);
-                chunk.emit(Op::Lt(*ty), *line);
-                let done = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
-
-                chunk.emit(Op::LoadLocal(*counter), *line);
-                chunk.emit(Op::Const(one), *line);
-                chunk.emit(Op::Add(*ty), *line);
-                chunk.emit(Op::StoreLocal(*counter), *line);
+                let done = if *inclusive {
+                    // Stepping only while strictly below the bound means the
+                    // increment can never overflow the type.
+                    chunk.emit(Op::LoadLocal(*counter), *line);
+                    chunk.emit(Op::LoadLocal(*bound), *line);
+                    chunk.emit(Op::Lt(*ty), *line);
+                    let done = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
+                    chunk.emit(Op::LoadLocal(*counter), *line);
+                    chunk.emit(Op::Const(one), *line);
+                    chunk.emit(Op::Add(*ty), *line);
+                    chunk.emit(Op::StoreLocal(*counter), *line);
+                    done
+                } else {
+                    // The last value is one below the bound, so stepping to the
+                    // bound itself is in range and the test comes after.
+                    chunk.emit(Op::LoadLocal(*counter), *line);
+                    chunk.emit(Op::Const(one), *line);
+                    chunk.emit(Op::Add(*ty), *line);
+                    chunk.emit(Op::StoreLocal(*counter), *line);
+                    chunk.emit(Op::LoadLocal(*counter), *line);
+                    chunk.emit(Op::LoadLocal(*bound), *line);
+                    chunk.emit(Op::Lt(*ty), *line);
+                    chunk.emit(Op::JumpIfFalse(u32::MAX), *line)
+                };
                 chunk.emit(Op::Jump(top), *line);
 
                 let after = chunk.code.len() as u32;

@@ -1,4 +1,5 @@
 use crate::f16;
+use luarus_num::Rational;
 use std::rc::Rc;
 
 /// Every type Luarus has at runtime. There is no `number`: a program says which
@@ -16,6 +17,8 @@ pub enum RtType {
     F16,
     F32,
     F64,
+    /// Exact rational: unbounded, and never rounds.
+    Er,
     Bool,
     Str,
     Nil,
@@ -35,6 +38,7 @@ impl RtType {
             RtType::F16 => "f16",
             RtType::F32 => "f32",
             RtType::F64 => "f64",
+            RtType::Er => "er",
             RtType::Bool => "bool",
             RtType::Str => "str",
             RtType::Nil => "nil",
@@ -54,6 +58,7 @@ impl RtType {
             "f16" => RtType::F16,
             "f32" => RtType::F32,
             "f64" => RtType::F64,
+            "er" => RtType::Er,
             "bool" => RtType::Bool,
             "str" => RtType::Str,
             "nil" => RtType::Nil,
@@ -77,8 +82,13 @@ impl RtType {
         matches!(self, RtType::F16 | RtType::F32 | RtType::F64)
     }
 
+    /// Exact, unbounded, and neither an integer nor a float.
+    pub fn is_exact(self) -> bool {
+        matches!(self, RtType::Er)
+    }
+
     pub fn is_numeric(self) -> bool {
-        self.is_int() || self.is_float()
+        self.is_int() || self.is_float() || self.is_exact()
     }
 
     /// Inclusive bounds for an integer type.
@@ -113,9 +123,10 @@ impl RtType {
             8 => RtType::F16,
             9 => RtType::F32,
             10 => RtType::F64,
-            11 => RtType::Bool,
-            12 => RtType::Str,
-            13 => RtType::Nil,
+            11 => RtType::Er,
+            12 => RtType::Bool,
+            13 => RtType::Str,
+            14 => RtType::Nil,
             _ => return None,
         })
     }
@@ -132,6 +143,8 @@ pub enum Const {
     F16(u16),
     F32(f32),
     F64(f64),
+    /// An exact rational, in lowest terms.
+    Er(Rational),
     Bool(bool),
     Str(String),
     Nil,
@@ -152,6 +165,7 @@ impl PartialEq for Const {
             (Const::F16(a), Const::F16(b)) => a == b,
             (Const::F32(a), Const::F32(b)) => a.to_bits() == b.to_bits(),
             (Const::F64(a), Const::F64(b)) => a.to_bits() == b.to_bits(),
+            (Const::Er(a), Const::Er(b)) => a == b,
             (Const::Bool(a), Const::Bool(b)) => a == b,
             (Const::Str(a), Const::Str(b)) => a == b,
             (Const::Nil, Const::Nil) => true,
@@ -169,6 +183,8 @@ pub enum Value {
     /// after every operation, so the extra range is never observable.
     F32(f32),
     F64(f64),
+    /// Shared, since a rational is variable-sized and never mutated.
+    Er(Rc<Rational>),
     Bool(bool),
     Str(Rc<str>),
     Nil,
@@ -182,6 +198,7 @@ impl Value {
             Const::F16(bits) => Value::F32(f16::to_f32(*bits)),
             Const::F32(v) => Value::F32(*v),
             Const::F64(v) => Value::F64(*v),
+            Const::Er(r) => Value::Er(Rc::new(r.clone())),
             Const::Bool(v) => Value::Bool(*v),
             Const::Str(s) => Value::Str(Rc::from(s.as_str())),
             Const::Nil => Value::Nil,
@@ -195,6 +212,7 @@ impl Value {
             Value::Uint(v) => v.to_string(),
             Value::F32(v) => format_float(*v as f64, ty),
             Value::F64(v) => format_float(*v, ty),
+            Value::Er(r) => r.to_string(),
             Value::Bool(v) => v.to_string(),
             Value::Str(s) => s.to_string(),
             Value::Nil => "nil".to_string(),

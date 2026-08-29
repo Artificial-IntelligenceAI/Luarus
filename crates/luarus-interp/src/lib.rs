@@ -27,6 +27,7 @@
 //! been encoded and decoded on the way.
 
 use std::io::Write;
+use std::rc::Rc;
 
 use luarus_bytecode::value::Value;
 use luarus_bytecode::{f16, Const, RtType};
@@ -110,7 +111,7 @@ impl Interp<'_> {
                 Ok(())
             }
 
-            TStmt::Loop { place, ty, from, to, body, line, .. } => {
+            TStmt::Loop { place, ty, from, to, inclusive, body, line, .. } => {
                 // Counting directly, with none of the jumps and hidden slots the
                 // compiled form needs — which is the point of the oracle.
                 let from = self.eval(from, *line)?;
@@ -119,7 +120,7 @@ impl Interp<'_> {
                     return Err(err(Rule::BytecodeIsWellFormed, *line, "loop bounds are not integers"));
                 };
                 let unsigned = ty.is_unsigned_int();
-                while i <= stop {
+                while if *inclusive { i <= stop } else { i < stop } {
                     if let Some(place) = place {
                         let v = if unsigned { Value::Uint(i as u64) } else { Value::Int(i as i64) };
                         match place {
@@ -211,6 +212,7 @@ fn fit(v: i128, ty: RtType, line: u32) -> Result<Value, InterpError> {
 fn negate(v: Value, ty: RtType, line: u32) -> Result<Value, InterpError> {
     match (&v, ty) {
         (Value::Int(a), t) if t.is_signed_int() => fit(-(*a as i128), t, line),
+        (Value::Er(a), RtType::Er) => Ok(Value::Er(Rc::new(a.neg()))),
         (Value::F32(a), RtType::F16) => Ok(Value::F32(f16::round(-a))),
         (Value::F32(a), _) => Ok(Value::F32(-a)),
         (Value::F64(a), _) => Ok(Value::F64(-a)),
@@ -219,6 +221,24 @@ fn negate(v: Value, ty: RtType, line: u32) -> Result<Value, InterpError> {
 }
 
 fn arith(op: BinOp, a: &Value, b: &Value, ty: RtType, line: u32) -> Result<Value, InterpError> {
+    if ty == RtType::Er {
+        let (Value::Er(x), Value::Er(y)) = (a, b) else {
+            return Err(err(Rule::BytecodeIsWellFormed, line, "expected er operands"));
+        };
+        let r = match op {
+            BinOp::Add => x.add(y),
+            BinOp::Sub => x.sub(y),
+            BinOp::Mul => x.mul(y),
+            BinOp::Div => x
+                .div(y)
+                .ok_or_else(|| err(Rule::NoDivisionByZero, line, "division by zero"))?,
+            BinOp::Rem => x
+                .rem(y)
+                .ok_or_else(|| err(Rule::NoDivisionByZero, line, "remainder by zero"))?,
+            _ => unreachable!("arith with a comparison"),
+        };
+        return Ok(Value::Er(Rc::new(r)));
+    }
     if ty.is_int() {
         let (Some(x), Some(y)) = (as_int(a), as_int(b)) else {
             return Err(err(Rule::BytecodeIsWellFormed, line, "expected integers"));
@@ -297,6 +317,7 @@ fn compare(op: BinOp, a: &Value, b: &Value, line: u32) -> Result<Value, InterpEr
         (Value::F32(x), Value::F32(y)) => x.partial_cmp(y),
         (Value::F64(x), Value::F64(y)) => x.partial_cmp(y),
         (Value::Bool(x), Value::Bool(y)) => x.partial_cmp(y),
+        (Value::Er(x), Value::Er(y)) => Some(x.cmp_to(y)),
         (Value::Str(x), Value::Str(y)) => Some(x.as_ref().cmp(y.as_ref())),
         (Value::Nil, Value::Nil) => Some(Equal),
         _ => return Err(err(Rule::BytecodeIsWellFormed, line, "cannot compare these values")),

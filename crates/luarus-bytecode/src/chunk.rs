@@ -99,6 +99,7 @@ fn show_const(c: &Const) -> String {
         Const::F16(bits) => format!("f16    {} (0x{bits:04x})", crate::f16::to_f32(*bits)),
         Const::F32(v) => format!("f32    {v}"),
         Const::F64(v) => format!("f64    {v}"),
+        Const::Er(r) => format!("er     {r}"),
         Const::Bool(v) => format!("bool   {v}"),
         Const::Str(s) => format!("str    {s:?}"),
         Const::Nil => "nil".to_string(),

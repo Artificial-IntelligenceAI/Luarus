@@ -8,7 +8,7 @@ use crate::op::Op;
 use crate::value::{Const, RtType};
 
 pub const MAGIC: [u8; 4] = *b"LRSB";
-pub const VERSION: u16 = 3;
+pub const VERSION: u16 = 4;
 
 #[derive(Debug)]
 pub struct DecodeError(pub String);
@@ -49,6 +49,12 @@ impl Writer {
     }
     fn ty(&mut self, t: RtType) {
         self.u8(t.tag());
+    }
+    fn limbs(&mut self, limbs: &[u32]) {
+        self.u32(limbs.len() as u32);
+        for l in limbs {
+            self.u32(*l);
+        }
     }
 }
 
@@ -94,6 +100,12 @@ pub fn encode(chunk: &Chunk) -> Vec<u8> {
             Const::F64(v) => {
                 w.u8(4);
                 w.u64(v.to_bits());
+            }
+            Const::Er(r) => {
+                w.u8(8);
+                w.u8(r.is_negative() as u8);
+                w.limbs(r.numerator().limbs());
+                w.limbs(r.denominator().limbs());
             }
             Const::Bool(v) => {
                 w.u8(5);
@@ -248,6 +260,15 @@ impl<'a> Reader<'a> {
         let tag = self.u8()?;
         RtType::from_tag(tag).ok_or_else(|| DecodeError(format!("unknown type tag {tag}")))
     }
+    fn limbs(&mut self) -> Result<Vec<u32>, DecodeError> {
+        let n = self.count()?;
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n {
+            out.push(self.u32()?);
+        }
+        Ok(out)
+    }
+
     /// Guard against a corrupt length field asking us to preallocate gigabytes.
     fn count(&mut self) -> Result<usize, DecodeError> {
         let n = self.u32()? as usize;
@@ -301,6 +322,15 @@ pub fn decode(buf: &[u8]) -> Result<Chunk, DecodeError> {
             5 => Const::Bool(r.u8()? != 0),
             6 => Const::Str(r.str()?),
             7 => Const::Nil,
+            8 => {
+                let negative = r.u8()? != 0;
+                let num = luarus_num::BigUint::from_limbs(r.limbs()?);
+                let den = luarus_num::BigUint::from_limbs(r.limbs()?);
+                Const::Er(
+                    luarus_num::Rational::new(negative, num, den)
+                        .ok_or_else(|| DecodeError("an er constant has a zero denominator".into()))?,
+                )
+            }
             _ => return Err(DecodeError(format!("unknown constant tag {tag}"))),
         });
     }

@@ -179,7 +179,8 @@ shadow a visible outer one either.
 ### 2.4 Loop
 
 ```
-loop   := 'loop' lifetime? target? '=' expression 'to' expression body
+loop   := 'loop' lifetime? target? '=' range body
+range  := expression 'to' expression | expression 'times'
 lifetime := 'perm' | 'temp'
 target := 'store-in' type identifier
 body   := '{' statement* '}' | 'end'
@@ -205,8 +206,13 @@ the loop. `temp` declares it in the body, so it is visible while the loop runs
 and gone afterwards — and with no body, nothing can see it at all. `temp` is the
 default, and writing it changes nothing.
 
+`n times` counts `n` values starting from zero, so the last is `n - 1` and
+`'11' times` is `'0' to '10'` said another way. Zero times runs nothing.
+
 **With no target**, there is no annotation for the bounds to read themselves as,
-so they use their own type if they have one and `i64` if they do not.
+so they use their own type when they have one. Failing that, a pair of bounds
+gets `i64`, and a count gets `u64` — `times` is itself the annotation, and a
+count has no negative values to offer.
 
 The target's type must be an **integer**: counting steps by exactly one, which
 only the integer types do exactly.
@@ -271,10 +277,20 @@ print["1"], print["2"] end                        -- 12, no newline
 | signed integers | `i8` `i16` `i32` `i64` |
 | unsigned integers | `u8` `u16` `u32` `u64` |
 | floating point | `f16` `f32` `f64` |
+| exact | `er` |
 | other | `bool` `str` `nil` |
 
 There is no implicit conversion between any two types, including widening.
 Mixing them is a compile error.
+
+`er` is an **exact rational**: a numerator over a denominator, both
+arbitrary-precision. It never rounds and never overflows, so a zero divisor is
+the only way its arithmetic can fail. Every value is kept in lowest terms, which
+makes equality structural — `'2/4'` and `'1/2'` are one value.
+
+An `er` prints in a form that reads back in: a terminating decimal where the
+denominator has only twos and fives, and `a/b` otherwise. `er` is numeric but
+neither an integer nor a float, so a loop cannot count over it.
 
 `f16` is IEEE 754 binary16. It is stored as 16 bits and re-rounded to half
 precision after every operation, so its precision loss is observable:
@@ -291,6 +307,7 @@ Given an expected type, the literal's text is read as follows.
 | `nil` | `nil` |
 | integer types | optional `+`/`-`, then decimal, or `0x`/`0o`/`0b` digits |
 | float types | a decimal float, or `inf`, `-inf`, `nan` |
+| `er` | an integer, a decimal, or a fraction `a/b` |
 
 `_` may appear anywhere in a numeric literal and is ignored: `'1_000_000'`.
 

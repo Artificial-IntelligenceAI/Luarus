@@ -10,6 +10,7 @@ use std::io::Write;
 use luarus_bytecode::value::Value;
 use luarus_bytecode::{f16, Chunk, Op, RtType};
 use luarus_diag::Rule;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct RuntimeError {
@@ -223,6 +224,7 @@ impl<'a> Vm<'a> {
                 let r = a.checked_neg().ok_or_else(|| self.overflow("negation", t))?;
                 Value::Int(self.fit_signed(r, t)?)
             }
+            (Value::Er(a), RtType::Er) => Value::Er(Rc::new(a.neg())),
             (Value::F32(a), RtType::F16) => Value::F32(f16::round(-a)),
             (Value::F32(a), _) => Value::F32(-a),
             (Value::F64(a), _) => Value::F64(-a),
@@ -314,6 +316,27 @@ impl<'a> Vm<'a> {
             return Ok(Value::Uint(self.fit_unsigned(r, ty)?));
         }
 
+        // Exact rationals are unbounded, so nothing here can overflow; only a
+        // zero divisor can fail.
+        if ty == RtType::Er {
+            let (Value::Er(a), Value::Er(b)) = (&lhs, &rhs) else {
+                return Err(self.malformed("expected er operands"));
+            };
+            let r = match op {
+                Op::Add(_) => a.add(b),
+                Op::Sub(_) => a.sub(b),
+                Op::Mul(_) => a.mul(b),
+                Op::Div(_) => a
+                    .div(b)
+                    .ok_or_else(|| self.err(Rule::NoDivisionByZero, "division by zero"))?,
+                Op::Rem(_) => a
+                    .rem(b)
+                    .ok_or_else(|| self.err(Rule::NoDivisionByZero, "remainder by zero"))?,
+                _ => unreachable!("arith called with {op:?}"),
+            };
+            return Ok(Value::Er(Rc::new(r)));
+        }
+
         // Floating point follows IEEE 754: no traps, infinities and NaN instead.
         match ty {
             RtType::F64 => {
@@ -343,6 +366,7 @@ impl<'a> Vm<'a> {
             (Value::F32(a), Value::F32(b)) => a.partial_cmp(b),
             (Value::F64(a), Value::F64(b)) => a.partial_cmp(b),
             (Value::Bool(a), Value::Bool(b)) => a.partial_cmp(b),
+            (Value::Er(a), Value::Er(b)) => Some(a.cmp_to(b)),
             (Value::Str(a), Value::Str(b)) => Some(a.as_ref().cmp(b.as_ref())),
             (Value::Nil, Value::Nil) => Some(std::cmp::Ordering::Equal),
             _ => return Err(self.malformed(format!("cannot compare these `{}` values", ty.name()))),

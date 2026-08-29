@@ -1,0 +1,30 @@
+-- `er` is an exact rational: unbounded, and it never rounds.
+var f64 (approx) = '0.1' end
+var er  (exact)  = '0.1' end
+print["f64: " | (approx) + '0.2' | \n] end
+print["er:  " | (exact) + '0.2' | \n] end
+print["f64 reaches 0.3? " | | (approx) + '0.2' | == '0.3' | \n] end
+print["er  reaches 0.3? " | | (exact)  + '0.2' | == '0.3' | \n] end
+
+-- Division is exact and closed, which no float type manages.
+var er (third) = '1/3' end
+print[(third) " * 3 = " | (third) * '3' | \n] end
+print["1/3 + 1/6 = " | (third) + er '1/6' | \n] end
+
+-- A fraction prints as a decimal when one terminates, and as a fraction when
+-- none does. Either way it reads back in.
+print[er '1/2' " " er '1/8' " " er '3/6' " " er '22/7' " " er '-2/4' \n] end
+
+-- Unbounded: this is far past any fixed-width type.
+var er (big) = '1' end
+loop temp = '80' times { set (big) = (big) * '3' end }
+print["3^80 = " (big) \n] end
+print["back down = " | (big) / (big) | \n] end
+
+-- Ordering works across signs and denominators.
+print[| er '1/3' < er '1/2' | " " | er '-1/3' < er '-1/2' | " " | er '2/4' == er '1/2' | \n] end
+
+-- Accumulating a tenth a thousand times lands exactly on a hundred.
+var er (sum) = '0' end
+loop temp = '1000' times { set (sum) = (sum) + er '0.1' end }
+print["a thousand tenths = " (sum) \n] end

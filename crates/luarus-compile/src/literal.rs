@@ -48,6 +48,13 @@ pub fn parse(text: &str, ty: RtType) -> Result<Const, LiteralError> {
                 ))
             }
         }
+        RtType::Er => luarus_num::Rational::parse(text).map(Const::Er).ok_or_else(|| {
+            err_help(
+                format!("`'{text}'` is not a valid `er`"),
+                "an exact rational is written as an integer, a decimal, or a fraction: \
+                 `'3'`, `'0.1'`, `'1/3'`",
+            )
+        }),
         t if t.is_int() => parse_int(text, t),
         t if t.is_float() => parse_float(text, t),
         _ => Err(err(format!("cannot write a literal of type `{}`", ty.name()))),

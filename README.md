@@ -123,6 +123,17 @@ A loop reaches the top of its type safely: the step happens only while the
 counter is strictly below the bound, so `'250' to '255'` on a `u8` never
 computes 256.
 
+Or say how many times, which needs no bounds and no type — `times` is the
+annotation, and a count is a `u64`, so a negative one will not compile:
+
+```luarus
+loop temp = '11' times {
+print["Hello" \n] end }
+```
+
+`'11' times` counts eleven values from zero, so it is `'0' to '10'` said another
+way.
+
 Give it braces instead of `end` and it runs a body once per value. Both the
 target and the body are optional, and they do different jobs — the target
 catches the values, the body runs on them:
@@ -189,6 +200,7 @@ above, or inside them as usual.
 i8   i16  i32  i64      signed integers
 u8   u16  u32  u64      unsigned integers
 f16  f32  f64           IEEE 754 binary16, binary32, binary64
+er                      exact rational, unbounded
 bool  str  nil
 ```
 
@@ -198,6 +210,33 @@ operation, so `2049` stores as `2048.0` and `70000` will not compile.
 
 Integer arithmetic **traps on overflow** rather than wrapping. Floating point
 follows IEEE 754, so it produces infinities and NaN instead.
+
+## Exact numbers
+
+`er` is an exact rational — a numerator over a denominator, both unbounded. It
+does not round, and it does not overflow:
+
+```luarus
+var f64 (approx) = '0.1' end
+var er  (exact)  = '0.1' end
+
+print[|(approx) + '0.2'|] end     -- 0.30000000000000004
+print[|(exact)  + '0.2'|] end     -- 0.3
+
+print[|er '1/3' * '3'|] end       -- exactly 1
+```
+
+Literals are integers, decimals or fractions — `'3'`, `'-2.25'`, `'1/3'` — and
+values print back in a form that reads in again: a decimal where one terminates,
+a fraction where none does. Every value is kept in lowest terms, so `'2/4'` and
+`'1/2'` are the same value.
+
+Nothing about `er` overflows, however far you push it, so a zero divisor is the
+only way its arithmetic can fail. It is not an integer type, so a loop cannot
+count over it.
+
+The arithmetic is hand-written — arbitrary-precision integers, binary long
+division, Euclid's algorithm — since the whole toolchain has no dependencies.
 
 ## Scope
 

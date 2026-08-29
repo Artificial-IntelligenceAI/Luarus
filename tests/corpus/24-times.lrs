@@ -1,0 +1,16 @@
+-- `n times` counts n values from zero, so it stops one below n.
+loop temp = '11' times {
+print["Hello" \n] end }
+
+-- Which makes it exactly the `to` form shifted by one.
+loop temp store-in i32 (i) = '5' times { print[(i)] end }
+print["|"] end
+loop temp store-in i32 (j) = '0' to '4' { print[(j)] end }
+print[\n] end
+
+-- Zero times runs nothing at all.
+loop temp = '0' times { print["never"] end }
+
+-- And it reaches the top of a type without overflowing it.
+loop perm store-in u8 (top) = '255' times {}
+print["last of 255 = " (top) \n] end

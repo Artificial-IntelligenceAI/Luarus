@@ -30,6 +30,10 @@ already uses.
 
 **Modules.** `pub` already records exports in the chunk; nothing reads them yet.
 
+**Conversions to and from `er`.** An exact rational cannot currently be turned
+into any other type, or built from one, which limits it to arithmetic among its
+own kind.
+
 **Explicit conversions.** With no implicit widening, the language needs a
 readable cast form before real arithmetic code is comfortable — and loops will
 make it urgent, since a counter and whatever it indexes must otherwise share a

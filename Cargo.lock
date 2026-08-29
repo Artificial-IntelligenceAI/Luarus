@@ -5,6 +5,9 @@ version = 3
 [[package]]
 name = "luarus-bytecode"
 version = "0.1.0"
+dependencies = [
+ "luarus-num",
+]
 
 [[package]]
 name = "luarus-cli"
@@ -24,6 +27,7 @@ version = "0.1.0"
 dependencies = [
  "luarus-bytecode",
  "luarus-diag",
+ "luarus-num",
  "luarus-syntax",
  "luarus-vm",
 ]
@@ -56,6 +60,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "luarus-num"
+version = "0.1.0"
+
+[[package]]
 name = "luarus-syntax"
 version = "0.1.0"
 dependencies = [
@@ -68,4 +76,5 @@ version = "0.1.0"
 dependencies = [
  "luarus-bytecode",
  "luarus-diag",
+ "luarus-num",
 ]

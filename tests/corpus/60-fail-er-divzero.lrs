@@ -1,0 +1,4 @@
+-- Exact rationals never overflow, so a zero divisor is the only way to fail.
+var er (a) = '1/3' end
+var er (z) = '0' end
+print[| (a) / (z) | \n] end

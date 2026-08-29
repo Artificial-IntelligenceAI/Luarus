@@ -291,14 +291,17 @@ impl Parser {
         }
 
         self.expect_assign()?;
-        let from = self.expr()?;
-        if !self.eat_word("to") {
+        let first = self.expr()?;
+        let range = if self.eat_word("to") {
+            LoopRange::Between { from: first, to: self.expr()? }
+        } else if self.eat_word("times") {
+            LoopRange::Times(first)
+        } else {
             let t = self.peek().clone();
             return Err(self
-                .err(t.span, Rule::StatementForm, format!("expected `to`, found {}", t.tok.describe()))
-                .with_help("a loop counts between two bounds: `= '0' to '10'`"));
-        }
-        let to = self.expr()?;
+                .err(t.span, Rule::StatementForm, format!("expected `to` or `times`, found {}", t.tok.describe()))
+                .with_help("a loop counts between bounds (`= '0' to '10'`) or a number of times (`= '11' times`)"));
+        };
 
         // Braces hold a body; `end` means there is none.
         if self.peek().tok == Tok::LBrace {
@@ -313,10 +316,10 @@ impl Parser {
                 ));
             }
             let end = self.bump().span;
-            return Ok(Stmt::Loop { perm, target, from, to, body, span: start.to(end) });
+            return Ok(Stmt::Loop { perm, target, range, body, span: start.to(end) });
         }
         let end = self.expect_end()?;
-        Ok(Stmt::Loop { perm, target, from, to, body: Vec::new(), span: start.to(end) })
+        Ok(Stmt::Loop { perm, target, range, body: Vec::new(), span: start.to(end) })
     }
 
     /// `print [ item item ... ]`. Items are juxtaposed, not separated.

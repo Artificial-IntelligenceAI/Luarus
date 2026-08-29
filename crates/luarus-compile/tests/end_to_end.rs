@@ -755,3 +755,124 @@ fn an_unclosed_loop_body_is_reported() {
     let d = diags("loop temp = '1' to '2' { print[\"x\"] end");
     assert_eq!(d[0].rule, Rule::BlocksAreBraced);
 }
+
+// ------------------------------------------------------ exact rationals (er)
+
+#[test]
+fn er_is_exact_where_a_float_is_not() {
+    // The canonical float embarrassment, on both types side by side.
+    assert_eq!(run("var f64 (a) = '0.1' end print[|(a) + '0.2'|] end"), "0.30000000000000004");
+    assert_eq!(run("var er (a) = '0.1' end print[|(a) + '0.2'|] end"), "0.3");
+    assert_eq!(run("var f64 (a) = '0.1' end print[||(a) + '0.2'| == '0.3'|] end"), "false");
+    assert_eq!(run("var er (a) = '0.1' end print[||(a) + '0.2'| == '0.3'|] end"), "true");
+}
+
+#[test]
+fn er_division_is_exact_and_closed() {
+    assert_eq!(run("print[|er '1' / er '3'|] end"), "1/3");
+    assert_eq!(run("print[||er '1' / er '3'| * er '3'|] end"), "1");
+    assert_eq!(run("print[|er '1/3' + er '1/6'|] end"), "0.5");
+}
+
+#[test]
+fn er_prints_a_decimal_when_one_terminates_and_a_fraction_otherwise() {
+    assert_eq!(run("print[er '1/2' \" \" er '1/8' \" \" er '1/10'] end"), "0.5 0.125 0.1");
+    assert_eq!(run("print[er '1/3' \" \" er '22/7'] end"), "1/3 22/7");
+    // Always in lowest terms, so these are the same value.
+    assert_eq!(run("print[|er '2/4' == er '1/2'|] end"), "true");
+    assert_eq!(run("print[er '6/3'] end"), "2");
+}
+
+#[test]
+fn er_is_unbounded() {
+    let src = "var er (v) = '1' end loop temp = '80' times { set (v) = (v) * '3' end } print[(v)] end";
+    assert_eq!(run(src), "147808829414345923316083210206383297601");
+}
+
+#[test]
+fn er_does_not_accumulate_error() {
+    let src = "var er (s) = '0' end loop temp = '1000' times { set (s) = (s) + er '0.1' end } \
+               print[(s)] end";
+    assert_eq!(run(src), "100");
+}
+
+#[test]
+fn er_orders_across_signs_and_denominators() {
+    assert_eq!(run("print[|er '1/3' < er '1/2'|] end"), "true");
+    assert_eq!(run("print[|er '-1/3' < er '-1/2'|] end"), "false");
+    assert_eq!(run("print[|er '-1' < er '0'|] end"), "true");
+}
+
+#[test]
+fn er_never_overflows_but_still_refuses_a_zero_divisor() {
+    let e = runtime_error("var er (z) = '0' end print[|er '1' / (z)|] end");
+    assert_eq!(e.rule, Some(Rule::NoDivisionByZero));
+}
+
+#[test]
+fn er_takes_integers_decimals_and_fractions() {
+    assert_eq!(run("print[er '3' \" \" er '-2.25' \" \" er '1_000.5' \" \" er '-2/7'] end"),
+               "3 -2.25 1000.5 -2/7");
+    assert_eq!(diags("print[er 'x'] end")[0].rule, Rule::ValuesMustFit);
+    // A zero denominator is not a rational at all, so it fails at compile time.
+    assert_eq!(diags("print[er '1/0'] end")[0].rule, Rule::ValuesMustFit);
+}
+
+#[test]
+fn er_does_not_mix_with_the_other_numeric_types() {
+    assert!(errors("var f64 (a) = '1' end var er (b) = (a) end")[0].contains("expected `er`"));
+    assert!(errors("var er (a) = '1' end var i32 (b) = (a) end")[0].contains("expected `i32`"));
+}
+
+#[test]
+fn a_loop_cannot_count_over_er() {
+    // Exact rationals are numeric but not integers, and a step of one is only
+    // exact on the integer types.
+    assert_eq!(diags("loop temp store-in er (i) = '0' to '3' end")[0].rule, Rule::LoopsCountIntegers);
+}
+
+// ------------------------------------------------------------------- times
+
+#[test]
+fn runs_the_worked_times_example() {
+    let out = run("loop temp = '11' times {\nprint[\"Hello\" \\n] end }");
+    assert_eq!(out.lines().count(), 11);
+}
+
+#[test]
+fn times_counts_from_zero_and_stops_below_the_count() {
+    assert_eq!(run("loop temp store-in i32 (i) = '5' times { print[(i)] end }"), "01234");
+    // Which makes it the `to` form shifted by one.
+    assert_eq!(
+        run("loop temp store-in i32 (i) = '5' times { print[(i)] end }"),
+        run("loop temp store-in i32 (j) = '0' to '4' { print[(j)] end }")
+    );
+}
+
+#[test]
+fn zero_times_runs_nothing() {
+    assert_eq!(run("loop temp = '0' times { print[\"never\"] end } print[\"done\"] end"), "done");
+}
+
+#[test]
+fn a_count_needs_no_type_and_may_not_be_negative() {
+    // `times` is the annotation: a count falls back to u64, which has no
+    // negative values to offer.
+    assert_eq!(run("loop temp = '3' times { print[\".\"] end }"), "...");
+    let d = diags("loop temp = '-1' times { print[\".\"] end }");
+    assert_eq!(d[0].rule, Rule::ValuesMustFit);
+    assert!(d[0].help.as_deref().unwrap().contains("unsigned"));
+}
+
+#[test]
+fn times_reaches_the_top_of_its_type() {
+    // 255 values on a u8 is 0 through 254, and the final step to 255 fits.
+    assert_eq!(run("loop perm store-in u8 (i) = '255' times {} print[(i)] end"), "254");
+    assert_eq!(diags("loop temp store-in u8 (i) = '256' times {}")[0].rule, Rule::ValuesMustFit);
+}
+
+#[test]
+fn a_loop_wants_to_or_times() {
+    let d = diags("loop temp = '3' end");
+    assert!(d[0].message.contains("expected `to` or `times`"), "{:?}", d[0].message);
+}

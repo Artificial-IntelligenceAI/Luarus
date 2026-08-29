@@ -10,7 +10,9 @@ rust-version.workspace = true
 luarus-diag.workspace = true
 luarus-syntax.workspace = true
 luarus-bytecode.workspace = true
+luarus-num.workspace = true
 
 [dev-dependencies]
 luarus-vm.workspace = true
 luarus-bytecode.workspace = true
+luarus-num.workspace = true

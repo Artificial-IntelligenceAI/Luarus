@@ -5,6 +5,7 @@ members = [
     "crates/luarus-heap",
     "crates/luarus-gen",
     "crates/luarus-interp",
+    "crates/luarus-num",
     "crates/luarus-syntax",
     "crates/luarus-bytecode",
     "crates/luarus-compile",
@@ -24,6 +25,7 @@ luarus-diag = { path = "crates/luarus-diag" }
 luarus-heap = { path = "crates/luarus-heap" }
 luarus-gen = { path = "crates/luarus-gen" }
 luarus-interp = { path = "crates/luarus-interp" }
+luarus-num = { path = "crates/luarus-num" }
 luarus-syntax = { path = "crates/luarus-syntax" }
 luarus-bytecode = { path = "crates/luarus-bytecode" }
 luarus-compile = { path = "crates/luarus-compile" }
