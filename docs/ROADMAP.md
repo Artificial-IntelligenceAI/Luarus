@@ -5,9 +5,9 @@ part of a pipeline over a large one. Everything below is open for design.
 
 ## Next
 
-**Control flow.** `if`/`else` and a loop. The main question is what the block
-syntax is, given `end` already closes a statement chain — a block may need a
-different closer to stay readable.
+**Loops.** `if`/`else` is in; blocks are braced, so a loop has its syntax
+waiting for it. The open questions are `while` versus `for` versus both, and
+what `break` looks like.
 
 **Functions.** Parameter and return annotations, a call syntax that does not
 collide with `(name)` or with print's `[ ]`, and frames in the VM. This is the
@@ -29,7 +29,10 @@ already uses.
 **Modules.** `pub` already records exports in the chunk; nothing reads them yet.
 
 **Explicit conversions.** With no implicit widening, the language needs a
-readable cast form before real arithmetic code is comfortable. Print's automatic
+readable cast form before real arithmetic code is comfortable — and loops will
+make it urgent, since a counter and whatever it indexes must otherwise share a
+type exactly. Typed literals (`f16 '5'`) already give the syntax a shape to
+follow. Print's automatic
 stringification is currently the only exception, and a cast would let it stop
 being one.
 

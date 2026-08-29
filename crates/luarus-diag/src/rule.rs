@@ -26,6 +26,10 @@ pub enum Rule {
     EscapesAreText,
     /// Every character belongs to a name, a value, an operator or a comment.
     LexicalForm,
+    /// A block is delimited by braces.
+    BlocksAreBraced,
+    /// A condition is a bool; there is no truthiness.
+    ConditionsAreBool,
 
     // ---- types
     /// A literal takes its type from its context.
@@ -71,6 +75,8 @@ impl Rule {
             Rule::ComparisonsDoNotChain => "comparisons-do-not-chain",
             Rule::EscapesAreText => "escapes-are-text",
             Rule::LexicalForm => "lexical-form",
+            Rule::BlocksAreBraced => "blocks-are-braced",
+            Rule::ConditionsAreBool => "conditions-are-bool",
             Rule::LiteralsNeedAType => "literals-need-a-type",
             Rule::ValuesMustFit => "values-must-fit",
             Rule::NoImplicitConversion => "no-implicit-conversion",
@@ -106,8 +112,13 @@ impl Rule {
             Rule::LexicalForm => {
                 "every character belongs to a name, a value, an operator or a comment"
             }
+            Rule::BlocksAreBraced => "a block is written `{ ... }`, and `else` divides one in two",
+            Rule::ConditionsAreBool => {
+                "a condition is a `bool`; no other type is true or false in Luarus"
+            }
             Rule::LiteralsNeedAType => {
-                "a literal has no type of its own and takes one from its context"
+                "a literal has no type of its own and takes one from its context, or says it \
+                 outright as in `f16 '5'`"
             }
             Rule::ValuesMustFit => {
                 "a literal must be a valid value of the type it is read as"
@@ -138,6 +149,8 @@ impl Rule {
         Rule::ComparisonsDoNotChain,
         Rule::EscapesAreText,
         Rule::LexicalForm,
+        Rule::BlocksAreBraced,
+        Rule::ConditionsAreBool,
         Rule::LiteralsNeedAType,
         Rule::ValuesMustFit,
         Rule::NoImplicitConversion,
@@ -169,6 +182,6 @@ mod tests {
     #[test]
     fn every_rule_is_listed_in_all() {
         // ALL is hand-written, so guard against a rule being added without it.
-        assert_eq!(Rule::ALL.len(), 21);
+        assert_eq!(Rule::ALL.len(), 23);
     }
 }

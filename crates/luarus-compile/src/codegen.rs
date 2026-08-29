@@ -23,10 +23,18 @@ pub fn emit(source_name: &str, checked: &Checked) -> Chunk {
         })
         .collect();
 
-    for stmt in &checked.stmts {
+    emit_block(&mut chunk, &checked.stmts);
+
+    let last = chunk.lines.last().copied().unwrap_or(1);
+    chunk.emit(Op::Halt, last);
+    chunk
+}
+
+fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
+    for stmt in stmts {
         match stmt {
             TStmt::Store { place, value, line } => {
-                emit_expr(&mut chunk, value, *line);
+                emit_expr(chunk, value, *line);
                 let op = match place {
                     Place::Local(slot) => Op::StoreLocal(*slot),
                     Place::Global(idx) => Op::StoreGlobal(*idx),
@@ -37,18 +45,30 @@ pub fn emit(source_name: &str, checked: &Checked) -> Chunk {
                 // Juxtaposed items are written in order, which produces exactly
                 // the same output as concatenating them first.
                 for item in items {
-                    emit_expr(&mut chunk, item, *line);
+                    emit_expr(chunk, item, *line);
                     chunk.emit(Op::Write(item.ty()), *line);
+                }
+            }
+            TStmt::If { cond, then_arm, else_arm, line } => {
+                emit_expr(chunk, cond, *line);
+                // The destinations are not known yet, so both jumps go out with
+                // a placeholder and are corrected once they are reached.
+                let to_else = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
+                emit_block(chunk, then_arm);
+
+                if else_arm.is_empty() {
+                    let after = chunk.code.len() as u32;
+                    chunk.patch_jump(to_else, after);
+                } else {
+                    let past_else = chunk.emit(Op::Jump(u32::MAX), *line);
+                    chunk.patch_jump(to_else, chunk.code.len() as u32);
+                    emit_block(chunk, else_arm);
+                    let after = chunk.code.len() as u32;
+                    chunk.patch_jump(past_else, after);
                 }
             }
         }
     }
-
-    let last = checked.stmts.last().map(|s| match s {
-        TStmt::Store { line, .. } | TStmt::Print { line, .. } => *line,
-    });
-    chunk.emit(Op::Halt, last.unwrap_or(1));
-    chunk
 }
 
 fn emit_expr(chunk: &mut Chunk, e: &TExpr, line: u32) {

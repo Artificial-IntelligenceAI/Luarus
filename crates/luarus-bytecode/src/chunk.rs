@@ -46,6 +46,17 @@ impl Chunk {
         self.code.len() - 1
     }
 
+    /// Point a previously emitted jump at `target`.
+    ///
+    /// A forward jump cannot know its destination when it is emitted, so it goes
+    /// out with a placeholder and is corrected once the destination is reached.
+    pub fn patch_jump(&mut self, at: usize, target: u32) {
+        match &mut self.code[at] {
+            Op::Jump(t) | Op::JumpIfFalse(t) => *t = target,
+            other => panic!("tried to patch {other:?}, which is not a jump"),
+        }
+    }
+
     /// A human-readable listing, in the spirit of `javap -c`.
     pub fn disassemble(&self) -> String {
         let mut out = String::new();
@@ -105,6 +116,7 @@ fn show_op(chunk: &Chunk, op: Op) -> String {
             let name = chunk.local_names.get(n as usize).cloned().unwrap_or_default();
             format!("{m:<14} {n}    -- ({name})")
         }
+        Op::Jump(t) | Op::JumpIfFalse(t) => format!("{m:<14} {t}"),
         Op::LoadGlobal(n) | Op::StoreGlobal(n) => {
             let name = chunk.globals.get(n as usize).map(|g| g.name.clone()).unwrap_or_default();
             format!("{m:<14} {n}    -- ({name})")

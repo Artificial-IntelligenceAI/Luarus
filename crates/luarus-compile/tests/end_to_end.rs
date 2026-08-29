@@ -404,3 +404,131 @@ fn columns_count_characters_as_a_reader_would() {
     let text = luarus_diag::render(src, "t.lrs", &diags(src)[0]);
     assert!(text.contains("t.lrs:1:31"), "{text}");
 }
+
+// ------------------------------------------------------------ if and else
+
+#[test]
+fn runs_the_worked_if_example() {
+    let src = "var f16 (x) = '1000' end\n\
+               if (x) > f16 '5' {\n\
+               print[\"x is greater than 5\" \\n] end\n\
+               else print[\"x is less than 5\" \\n] end }";
+    assert_eq!(run(src), "x is greater than 5\n");
+}
+
+#[test]
+fn takes_the_else_arm_when_the_condition_is_false() {
+    let src = "var f16 (x) = '1' end if (x) > f16 '5' { print[\"greater\"] end \
+               else print[\"less\"] end }";
+    assert_eq!(run(src), "less");
+}
+
+#[test]
+fn an_if_needs_no_else() {
+    assert_eq!(run("var i32 (n) = '7' end if (n) > '5' { print[\"big\"] end }"), "big");
+    assert_eq!(run("var i32 (n) = '1' end if (n) > '5' { print[\"big\"] end } print[\".\"] end"), ".");
+}
+
+#[test]
+fn ifs_nest() {
+    let src = "var i32 (n) = '7' end \
+               if (n) > '5' { print[\"big \"] end \
+                 if (n) > '6' { print[\"very\"] end else print[\"not huge\"] end } } \
+               print[\" done\"] end";
+    assert_eq!(run(src), "big very done");
+}
+
+#[test]
+fn else_may_hold_another_if() {
+    // Chained conditions fall out of `else` holding statements, one of which
+    // can itself be an `if`.
+    let grade = |n: &str| {
+        run(&format!(
+            "var i32 (n) = '{n}' end \
+             if (n) > '90' {{ print[\"a\"] end \
+             else if (n) > '80' {{ print[\"b\"] end else print[\"c\"] end }} }}"
+        ))
+    };
+    assert_eq!(grade("95"), "a");
+    assert_eq!(grade("85"), "b");
+    assert_eq!(grade("10"), "c");
+}
+
+#[test]
+fn both_arms_are_type_checked_even_though_one_runs() {
+    let e = errors("var i32 (n) = '1' end if (n) > '0' { print[\"ok\"] end else print[(gone)] end }");
+    assert!(e[0].contains("`(gone)` is not declared"), "{e:?}");
+}
+
+#[test]
+fn a_block_is_a_scope() {
+    let e = errors(
+        "var i32 (n) = '1' end if (n) > '0' { var i32 (inner) = '5' end } print[(inner)] end",
+    );
+    assert!(e[0].contains("`(inner)` is not declared"), "{e:?}");
+}
+
+#[test]
+fn a_block_can_read_the_scope_around_it() {
+    assert_eq!(run("var i32 (n) = '7' end if (n) > '5' { print[(n)] end }"), "7");
+}
+
+#[test]
+fn there_is_no_truthiness() {
+    let d = diags("var i32 (n) = '1' end if (n) { print[\"x\"] end }");
+    assert_eq!(d[0].rule, Rule::ConditionsAreBool);
+    assert!(d[0].message.contains("`i32`"), "{:?}", d[0].message);
+}
+
+#[test]
+fn an_unterminated_block_is_reported() {
+    let d = diags("var i32 (n) = '1' end if (n) > '0' { print[\"hi\"] end");
+    assert_eq!(d[0].rule, Rule::BlocksAreBraced);
+}
+
+#[test]
+fn a_condition_may_be_a_bare_bool() {
+    assert_eq!(run("var bool (go) = 'true' end if (go) { print[\"yes\"] end }"), "yes");
+}
+
+// ------------------------------------------------------- typed literals
+
+#[test]
+fn a_typed_literal_supplies_its_own_type() {
+    // Each of these would be "cannot tell what type this value is" unadorned.
+    assert_eq!(run("print[i32 '42' \" \" f64 '1.5' \" \" str '12'] end"), "42 1.5 12");
+}
+
+#[test]
+fn a_typed_literal_works_where_context_already_gives_one() {
+    assert_eq!(run("var f16 (x) = f16 '1000' end print[(x)] end"), "1000.0");
+}
+
+#[test]
+fn a_typed_literal_may_not_disagree_with_its_context() {
+    let d = diags("var i32 (n) = f64 '1' end");
+    assert_eq!(d[0].rule, Rule::NoImplicitConversion);
+    assert!(d[0].message.contains("this literal says `f64`"), "{:?}", d[0].message);
+}
+
+#[test]
+fn a_typed_literal_is_still_range_checked() {
+    let d = diags("print[u8 '300'] end");
+    assert_eq!(d[0].rule, Rule::ValuesMustFit);
+}
+
+#[test]
+fn a_typed_literal_needs_a_real_type() {
+    assert_eq!(diags("print[number '1'] end")[0].rule, Rule::TypesMustExist);
+}
+
+#[test]
+fn a_type_word_must_be_followed_by_a_literal() {
+    assert_eq!(diags("print[i32 (x)] end")[0].rule, Rule::LiteralsNeedAType);
+}
+
+#[test]
+fn a_comparison_of_two_typed_literals_needs_no_context() {
+    // This is what `literals-need-a-type` used to reject outright.
+    assert_eq!(run("var bool (b) = i32 '1' == i32 '2' end print[(b)] end"), "false");
+}

@@ -77,6 +77,9 @@ pub enum Expr {
     Ident(Name),
     /// A bare escape such as `\n`. Always `str`, whatever the context.
     Escape { text: String, span: Span },
+    /// A literal that states its own type, as in `f16 '5'`. Usable anywhere,
+    /// including where nothing else would supply one.
+    TypedLiteral { ty: TypeRef, text: String, span: Span },
     Unary { op: UnOp, operand: Box<Expr>, span: Span },
     Binary { op: BinOp, lhs: Box<Expr>, rhs: Box<Expr>, span: Span },
     /// `| ... |`. Grouping uses pipes: `(...)` means an identifier and `[...]`
@@ -89,6 +92,7 @@ impl Expr {
         match self {
             Expr::Literal { span, .. }
             | Expr::Escape { span, .. }
+            | Expr::TypedLiteral { span, .. }
             | Expr::Unary { span, .. }
             | Expr::Binary { span, .. }
             | Expr::Group { span, .. } => *span,
@@ -118,6 +122,14 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    /// `if cond { ... else ... }`. One brace pair holds both arms, divided by
+    /// `else`, rather than a pair around each.
+    If {
+        cond: Expr,
+        then_arm: Vec<Stmt>,
+        else_arm: Vec<Stmt>,
+        span: Span,
+    },
     Print {
         /// Juxtaposed items, written back to back inside `[ ... ]`.
         /// `print` writes exactly these and nothing else — no separators and no
@@ -130,7 +142,10 @@ pub enum Stmt {
 impl Stmt {
     pub fn span(&self) -> Span {
         match self {
-            Stmt::Var { span, .. } | Stmt::Assign { span, .. } | Stmt::Print { span, .. } => *span,
+            Stmt::Var { span, .. }
+            | Stmt::Assign { span, .. }
+            | Stmt::Print { span, .. }
+            | Stmt::If { span, .. } => *span,
         }
     }
 }

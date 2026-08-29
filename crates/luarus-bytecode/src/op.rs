@@ -32,8 +32,13 @@ pub enum Op {
     Gt(RtType),
     Ge(RtType),
 
+    /// Continue at this instruction.
+    Jump(u32),
+    /// Pop a bool; continue at this instruction if it is false.
+    JumpIfFalse(u32),
+
     /// Pop and write, formatting according to the static type. Writes no
-    /// newline: `print` emits one explicitly when it stands alone in its chain.
+    /// newline: every line ending in Luarus is written by hand.
     Write(RtType),
     /// Discard the top of the stack.
     Pop,
@@ -61,6 +66,8 @@ impl Op {
             Op::Le(_) => "le",
             Op::Gt(_) => "gt",
             Op::Ge(_) => "ge",
+            Op::Jump(_) => "jump",
+            Op::JumpIfFalse(_) => "jump.false",
             Op::Write(_) => "write",
             Op::Pop => "pop",
             Op::Halt => "halt",

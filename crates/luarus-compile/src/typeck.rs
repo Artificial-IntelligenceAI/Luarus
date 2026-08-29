@@ -55,6 +55,7 @@ impl TExpr {
 pub enum TStmt {
     Store { place: Place, value: TExpr, line: u32 },
     Print { items: Vec<TExpr>, line: u32 },
+    If { cond: TExpr, then_arm: Vec<TStmt>, else_arm: Vec<TStmt>, line: u32 },
 }
 
 /// A whole checked program, ready for code generation.
@@ -68,11 +69,11 @@ pub struct Checked {
 pub fn check_program(src: &str, program: &Program) -> Result<Checked, Vec<Diagnostic>> {
     let mut cx = Checker {
         src,
-        scope: HashMap::new(),
+        scopes: vec![HashMap::new()],
         out: Checked::default(),
         errors: Vec::new(),
     };
-    cx.run(program);
+    cx.out.stmts = cx.block(&program.stmts);
     if cx.errors.is_empty() {
         Ok(cx.out)
     } else {
@@ -82,7 +83,9 @@ pub fn check_program(src: &str, program: &Program) -> Result<Checked, Vec<Diagno
 
 struct Checker<'a> {
     src: &'a str,
-    scope: HashMap<String, Binding>,
+    /// Innermost scope last. A block pushes one and pops it on the way out, so
+    /// a name declared inside an `if` is gone afterwards.
+    scopes: Vec<HashMap<String, Binding>>,
     out: Checked,
     errors: Vec<Diagnostic>,
 }
@@ -92,16 +95,28 @@ impl<'a> Checker<'a> {
         line_col(self.src, span.start).0 as u32
     }
 
-    fn run(&mut self, program: &Program) {
-        for stmt in &program.stmts {
-            // One bad statement should not suppress the rest of the file.
-            if let Err(d) = self.stmt(stmt) {
-                self.errors.push(d);
+    /// Check a run of statements, keeping going past any that fail so one bad
+    /// statement does not suppress the rest of the file.
+    fn block(&mut self, stmts: &[Stmt]) -> Vec<TStmt> {
+        let mut out = Vec::with_capacity(stmts.len());
+        for stmt in stmts {
+            match self.stmt(stmt) {
+                Ok(t) => out.push(t),
+                Err(d) => self.errors.push(d),
             }
         }
+        out
     }
 
-    fn stmt(&mut self, stmt: &Stmt) -> Result<(), Diagnostic> {
+    /// Check a block in a scope of its own.
+    fn scoped(&mut self, stmts: &[Stmt]) -> Vec<TStmt> {
+        self.scopes.push(HashMap::new());
+        let out = self.block(stmts);
+        self.scopes.pop();
+        out
+    }
+
+    fn stmt(&mut self, stmt: &Stmt) -> Result<TStmt, Diagnostic> {
         match stmt {
             Stmt::Var { modifier, ty, name, value, .. } => {
                 let declared = RtType::from_name(&ty.text).ok_or_else(|| {
@@ -112,7 +127,7 @@ impl<'a> Checker<'a> {
                 // declaration cannot refer to the variable it is defining.
                 let value = self.check(value, declared)?;
 
-                if let Some(prev) = self.scope.get(&name.text) {
+                if let Some(prev) = self.find(&name.text) {
                     let (line, _) = line_col(self.src, prev.declared_at.start);
                     return Err(Diagnostic::new(
                         name.span,
@@ -139,21 +154,19 @@ impl<'a> Checker<'a> {
                     }
                 };
 
-                self.scope.insert(
-                    name.text.clone(),
-                    Binding { place, ty: declared, declared_at: name.span },
-                );
+                self.scopes
+                    .last_mut()
+                    .expect("a scope is always open")
+                    .insert(name.text.clone(), Binding { place, ty: declared, declared_at: name.span });
                 let line = self.line(stmt.span());
-                self.out.stmts.push(TStmt::Store { place, value, line });
-                Ok(())
+                Ok(TStmt::Store { place, value, line })
             }
 
             Stmt::Assign { name, value, .. } => {
                 let binding = self.lookup(&name.text, name.span)?;
                 let value = self.check(value, binding.ty)?;
                 let line = self.line(stmt.span());
-                self.out.stmts.push(TStmt::Store { place: binding.place, value, line });
-                Ok(())
+                Ok(TStmt::Store { place: binding.place, value, line })
             }
 
             Stmt::Print { items, .. } => {
@@ -166,14 +179,39 @@ impl<'a> Checker<'a> {
                     checked.push(self.check(item, ty)?);
                 }
                 let line = self.line(stmt.span());
-                self.out.stmts.push(TStmt::Print { items: checked, line });
-                Ok(())
+                Ok(TStmt::Print { items: checked, line })
+            }
+
+            Stmt::If { cond, then_arm, else_arm, .. } => {
+                // No truthiness: the condition is a bool or it is an error.
+                let cond_ty = self.probe(cond).unwrap_or(RtType::Bool);
+                if cond_ty != RtType::Bool {
+                    return Err(Diagnostic::new(
+                        cond.span(),
+                        Rule::ConditionsAreBool,
+                        format!("this condition is `{}`", cond_ty.name()),
+                    )
+                    .with_help(format!(
+                        "compare it instead, as in `(x) != {} '0'`",
+                        cond_ty.name()
+                    )));
+                }
+                let cond = self.check(cond, RtType::Bool)?;
+                let then_arm = self.scoped(then_arm);
+                let else_arm = self.scoped(else_arm);
+                let line = self.line(stmt.span());
+                Ok(TStmt::If { cond, then_arm, else_arm, line })
             }
         }
     }
 
+    /// Look a name up from the innermost scope outwards.
+    fn find(&self, name: &str) -> Option<&Binding> {
+        self.scopes.iter().rev().find_map(|s| s.get(name))
+    }
+
     fn lookup(&self, name: &str, span: Span) -> Result<Binding, Diagnostic> {
-        self.scope.get(name).cloned().ok_or_else(|| {
+        self.find(name).cloned().ok_or_else(|| {
             let mut d =
                 Diagnostic::new(span, Rule::NamesMustBeDeclared, format!("`({name})` is not declared"));
             if let Some(near) = self.closest(name) {
@@ -188,8 +226,9 @@ impl<'a> Checker<'a> {
     /// Find a declared name within a small edit distance, for "did you mean".
     fn closest(&self, name: &str) -> Option<String> {
         let budget = (name.chars().count() / 3).max(1);
-        self.scope
-            .keys()
+        self.scopes
+            .iter()
+            .flat_map(|s| s.keys())
             .map(|k| (edit_distance(k, name), k))
             .filter(|(d, _)| *d <= budget)
             .min_by_key(|(d, _)| *d)
@@ -202,8 +241,8 @@ impl<'a> Checker<'a> {
     /// Those deserve very different messages, so the error paths ask this first.
     fn first_unresolved<'e>(&self, e: &'e Expr) -> Option<&'e luarus_syntax::ast::Name> {
         match e {
-            Expr::Literal { .. } | Expr::Escape { .. } => None,
-            Expr::Ident(n) => (!self.scope.contains_key(&n.text)).then_some(n),
+            Expr::Literal { .. } | Expr::Escape { .. } | Expr::TypedLiteral { .. } => None,
+            Expr::Ident(n) => self.find(&n.text).is_none().then_some(n),
             Expr::Group { inner, .. } => self.first_unresolved(inner),
             Expr::Unary { operand, .. } => self.first_unresolved(operand),
             Expr::Binary { lhs, rhs, .. } => {
@@ -221,7 +260,9 @@ impl<'a> Checker<'a> {
             Expr::Literal { .. } => None,
             // A bare escape is text whatever the surroundings.
             Expr::Escape { .. } => Some(RtType::Str),
-            Expr::Ident(n) => self.scope.get(&n.text).map(|b| b.ty),
+            // A typed literal supplies its own type; that is the whole point.
+            Expr::TypedLiteral { ty, .. } => RtType::from_name(&ty.text),
+            Expr::Ident(n) => self.find(&n.text).map(|b| b.ty),
             Expr::Group { inner, .. } => self.probe(inner),
             Expr::Unary { operand, .. } => self.probe(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
@@ -246,6 +287,29 @@ impl<'a> Checker<'a> {
                     Err(d)
                 }
             },
+
+            Expr::TypedLiteral { ty, text, span } => {
+                let declared = RtType::from_name(&ty.text).ok_or_else(|| {
+                    Diagnostic::new(ty.span, Rule::TypesMustExist, format!("unknown type `{}`", ty.text))
+                })?;
+                if declared != expected {
+                    return Err(Diagnostic::new(
+                        *span,
+                        Rule::NoImplicitConversion,
+                        format!("expected `{}`, but this literal says `{}`", expected.name(), declared.name()),
+                    ));
+                }
+                match crate::literal::parse(text, declared) {
+                    Ok(c) => Ok(TExpr::Const(c, declared)),
+                    Err(le) => {
+                        let mut d = Diagnostic::new(*span, le.rule, le.message);
+                        if let Some(h) = le.help {
+                            d = d.with_help(h);
+                        }
+                        Err(d)
+                    }
+                }
+            }
 
             Expr::Escape { text, span } => {
                 if expected != RtType::Str {

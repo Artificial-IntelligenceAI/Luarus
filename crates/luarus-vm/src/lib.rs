@@ -105,6 +105,17 @@ impl<'a> Vm<'a> {
                 Op::Pop => {
                     self.pop()?;
                 }
+                Op::Jump(target) => {
+                    self.pc = self.jump_target(target)?;
+                }
+                Op::JumpIfFalse(target) => {
+                    let Value::Bool(taken) = self.pop()? else {
+                        return Err(self.malformed("expected a bool to branch on"));
+                    };
+                    if !taken {
+                        self.pc = self.jump_target(target)?;
+                    }
+                }
                 Op::Const(k) => {
                     let c = self
                         .chunk
@@ -187,6 +198,15 @@ impl<'a> Vm<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Validate a jump destination, so a corrupt chunk cannot escape the code.
+    fn jump_target(&self, target: u32) -> Result<usize, RuntimeError> {
+        let t = target as usize;
+        if t > self.chunk.code.len() {
+            return Err(self.malformed(format!("jump to {target} is outside the code")));
+        }
+        Ok(t)
     }
 
     fn name_of_local(&self, n: u32) -> String {

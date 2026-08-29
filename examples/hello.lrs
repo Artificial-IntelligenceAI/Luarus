@@ -36,3 +36,23 @@ print["counter " (counter) " of luarus " (version) \n] end
 -- Comparisons produce bool.
 var bool (is big) = (total) > '1000' end
 print["is it big? " (is big) \n] end
+
+-- `if` takes a braced block, and `else` divides that same block in two.
+if (total) > i32 '1000' {
+  print["total is over a thousand" \n] end
+else
+  print["total is modest" \n] end }
+
+-- A block is a scope, and `else` may hold another `if`, which is how
+-- conditions chain.
+var i32 (score) = '85' end
+if (score) > '90' {
+  print["grade a" \n] end
+else if (score) > '80' {
+  print["grade b" \n] end
+else
+  print["grade c" \n] end } }
+
+-- A literal can state its own type instead of taking one from context, which
+-- lets it stand where nothing would supply one.
+print[i32 '42' " and " f64 '1.5' \n] end

@@ -69,6 +69,47 @@ A `|` where a value is expected opens a group and one where an operator is
 expected closes it, so there is no ambiguity — at the cost of `|` never becoming
 a bitwise operator.
 
+## Choosing
+
+`if` takes a braced block, and `else` divides that same block in two rather than
+opening a second one:
+
+```luarus
+var f16 (x) = '1000' end
+if (x) > f16 '5' {
+print["x is greater than 5" \n] end
+else print["x is less than 5" \n] end }
+```
+
+A block is a scope: a name declared inside one is gone at the `}`. There is **no
+truthiness** — a condition is a `bool` or it is an error, so `if (n)` on an
+integer will not compile.
+
+Conditions chain because `else` holds statements, and one of those may be
+another `if`:
+
+```luarus
+if (score) > '90' {
+  print["grade a" \n] end
+else if (score) > '80' {
+  print["grade b" \n] end
+else
+  print["grade c" \n] end } }
+```
+
+## Typed literals
+
+A literal normally takes its type from context. It can also state it outright,
+which lets it stand where nothing would supply one:
+
+```luarus
+print[i32 '42' " and " f64 '1.5'] end     -- neither has a context to read
+var bool (b) = i32 '1' == i32 '2' end     -- nor does either side here
+```
+
+`f16 '5'` is still a literal, not a conversion: it is checked and range-checked
+exactly as a bare one is, and it may not disagree with a type already expected.
+
 ## Printing
 
 `print` takes its values in brackets, juxtaposed rather than separated. Anything

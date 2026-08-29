@@ -60,9 +60,14 @@ impl Parser {
         Diagnostic::new(span, rule, msg)
     }
 
-    /// Skip forward past the next `end`, so the next statement can be parsed.
+    /// Skip forward to the end of the current construct, so the next one can
+    /// still be parsed. A `}` is left in place, since it closes an enclosing
+    /// block rather than this statement.
     fn recover(&mut self) {
         while !self.at_eof() {
+            if self.peek().tok == Tok::RBrace {
+                return;
+            }
             if self.eat_word("end") {
                 return;
             }
@@ -73,7 +78,7 @@ impl Parser {
     fn program(&mut self) -> Program {
         let mut stmts = Vec::new();
         while !self.at_eof() {
-            match self.chain() {
+            match self.item() {
                 Ok(mut c) => stmts.append(&mut c),
                 Err(d) => {
                     self.errors.push(d);
@@ -82,6 +87,57 @@ impl Parser {
             }
         }
         Program { stmts }
+    }
+
+    /// One thing at statement level: either a braced construct, which closes
+    /// itself, or a chain, which closes with `end`.
+    fn item(&mut self) -> Result<Vec<Stmt>, Diagnostic> {
+        if self.at_word("if") {
+            let start = self.bump().span;
+            return Ok(vec![self.if_stmt(start)?]);
+        }
+        self.chain()
+    }
+
+    /// `if cond { ... else ... }`. Both arms share one brace pair.
+    fn if_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
+        let cond = self.expr()?;
+
+        if self.peek().tok != Tok::LBrace {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::BlocksAreBraced, format!("expected `{{` after the condition, found {}", t.tok.describe()))
+                .with_help("an `if` body is braced: `if (x) > '5' { ... }`"));
+        }
+        let open = self.bump().span;
+
+        let then_arm = self.arm(open)?;
+        let else_arm = if self.eat_word("else") { self.arm(open)? } else { Vec::new() };
+
+        if self.peek().tok != Tok::RBrace {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::BlocksAreBraced, format!("expected `}}` to close this `if`, found {}", t.tok.describe()))
+                .with_help("only one `else` may divide a block"));
+        }
+        let end = self.bump().span;
+        Ok(Stmt::If { cond, then_arm, else_arm, span: start.to(end) })
+    }
+
+    /// Statements up to `else` or the closing brace.
+    fn arm(&mut self, open: Span) -> Result<Vec<Stmt>, Diagnostic> {
+        let mut stmts = Vec::new();
+        loop {
+            if self.peek().tok == Tok::RBrace || self.at_word("else") {
+                return Ok(stmts);
+            }
+            if self.at_eof() {
+                return Err(self
+                    .err(open, Rule::BlocksAreBraced, "unterminated block")
+                    .with_help("this `{` is never closed by a `}`"));
+            }
+            stmts.append(&mut self.item()?);
+        }
     }
 
     /// `stmt (',' stmt)* 'end'`.
@@ -310,6 +366,28 @@ impl Parser {
             Tok::Escape(text) => {
                 let span = self.bump().span;
                 Ok(Expr::Escape { text, span })
+            }
+            // `f16 '5'` — a literal saying its own type, so it can stand where
+            // nothing else would supply one.
+            Tok::Word(word) => {
+                let ty_span = self.bump().span;
+                match self.peek().tok.clone() {
+                    Tok::Str(text) => {
+                        let lit = self.bump().span;
+                        Ok(Expr::TypedLiteral {
+                            ty: TypeRef { text: word, span: ty_span },
+                            text,
+                            span: ty_span.to(lit),
+                        })
+                    }
+                    other => Err(self
+                        .err(
+                            ty_span.to(self.peek().span),
+                            Rule::LiteralsNeedAType,
+                            format!("expected a literal after `{word}`, found {}", other.describe()),
+                        )
+                        .with_help("a type in front of a value states that value's type, as in `f16 '5'`")),
+                }
             }
             Tok::Pipe => {
                 let start = self.bump().span;

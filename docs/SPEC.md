@@ -58,7 +58,18 @@ Escapes: `\n`, `\t`, `\r`, `\0`, `\\`, `\'`, `\"`.
 A literal has **no type of its own**. Its text is interpreted according to the
 type it is checked against (§3.2).
 
-### 1.3a Bare escapes
+### 1.3a Typed literals
+
+A literal may be preceded by a type, as in `f16 '5'`. The type states how to
+read the text, so such a literal needs no context and may appear anywhere a
+value may — including `print[i32 '42']` and `i32 '1' == i32 '2'`, both of which
+are errors unadorned.
+
+This is an *annotation*, not a conversion. The text is parsed and range-checked
+exactly as a bare literal is, and a typed literal in a position that expects a
+different type is an error rather than a cast.
+
+### 1.3b Bare escapes
 
 `\n`, `\t`, `\r`, `\0` and `\\` are also values on their own, outside any
 quotes. A bare escape is always `str`, whatever the surrounding context, so
@@ -79,6 +90,7 @@ variable may legitimately be called `(end)`.
 == != < <= > >=
 | ... | grouping
 [ ... ] print's value list
+{ ... } a block
 ,       statement chaining
 ```
 
@@ -122,7 +134,38 @@ assignment := 'set' identifier '=' expression
 
 The name must already be declared; the value is checked against its type.
 
-### 2.3 Print
+### 2.3 If
+
+```
+if := 'if' expression '{' statement* ('else' statement*)? '}'
+```
+
+The condition must be `bool`. Luarus has no truthiness: no integer, string or
+`nil` is true or false, and `if (n)` on an `i32` does not compile.
+
+One brace pair holds both arms and `else` divides it, rather than each arm
+carrying its own braces. An `if` is not part of a chain: it closes with `}` and
+takes no `end`, and it cannot be joined to other statements with `,`.
+
+Conditions chain without extra syntax, because `else` holds statements and one
+of those may be another `if`:
+
+```luarus
+if (score) > '90' {
+  print["a" \n] end
+else if (score) > '80' {
+  print["b" \n] end
+else
+  print["c" \n] end } }
+```
+
+Both arms are checked whether or not they can run.
+
+**A block is a scope.** A name declared inside one is not visible after the
+closing brace. Since a name is declared once, an inner declaration may not
+shadow a visible outer one either.
+
+### 2.4 Print
 
 ```
 print := 'print' '[' expression* ']'
@@ -254,10 +297,11 @@ error[values-must-fit]: `300` is out of range for `u8`
 The `message` describes this failure; the `rule` states what always holds; the
 `help` suggests a fix. The rule slug is stable and may be relied on.
 
-`luarus rules` prints the set. There are twenty-one, in four groups: form
+`luarus rules` prints the set. There are twenty-three, in four groups: form
 (`names-are-parenthesised`, `values-are-quoted`, `end-closes-a-chain`,
 `statement-form`, `print-takes-brackets`, `groups-are-piped`,
-`comparisons-do-not-chain`, `escapes-are-text`, `lexical-form`), types
+`comparisons-do-not-chain`, `escapes-are-text`, `lexical-form`,
+`blocks-are-braced`, `conditions-are-bool`), types
 (`literals-need-a-type`, `values-must-fit`, `no-implicit-conversion`,
 `types-must-exist`, `arithmetic-is-numeric`, `unsigned-is-never-negative`),
 names (`names-must-be-declared`, `names-are-declared-once`), and run time
@@ -298,6 +342,6 @@ output.
 
 ## 9. Not yet in the language
 
-Control flow, functions, records, arrays, maps, modules and imports, generics,
+Loops, functions, records, arrays, maps, modules and imports, generics,
 explicit conversions, string operations beyond comparison and printing, and any
 standard library.
