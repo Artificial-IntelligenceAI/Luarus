@@ -1,5 +1,5 @@
 [package]
-name = "luarus-interp"
+name = "luarus-gen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,10 +8,3 @@ rust-version.workspace = true
 
 [dependencies]
 luarus-bytecode.workspace = true
-luarus-compile.workspace = true
-luarus-diag.workspace = true
-luarus-syntax.workspace = true
-
-[dev-dependencies]
-luarus-vm.workspace = true
-luarus-gen.workspace = true

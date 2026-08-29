@@ -1,0 +1,12 @@
+-- Negative zero is a different constant from positive zero, though IEEE says
+-- they compare equal. The constant pool deduplicates by value, so comparing
+-- these with `==` would collapse them into one and whichever was interned
+-- first would win for both. Found by the generator, not by hand.
+var f64 (a) = '-0' end
+var f64 (b) = '0' end
+var f32 (c) = '-0' end
+var f32 (d) = '0' end
+var f16 (e) = '-0' end
+var f16 (f) = '0' end
+print[(a) " " (b) " " (c) " " (d) " " (e) " " (f) \n] end
+print[(a) == (b) " " (a) < (b) \n] end

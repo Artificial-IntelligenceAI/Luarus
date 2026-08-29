@@ -56,6 +56,51 @@ picked up. A file with `fail-` in its name must fail at run time, and both paths
 must fail with the same rule on the same line; a file without it must run to
 completion.
 
+## Generated programs
+
+`luarus-gen` writes Luarus programs from a seed. They must **type-check**, or
+the exercise is pointless — an invalid program is rejected identically by both
+paths and says nothing about either. So generation is type-directed: an
+expression is built to order for the type that is wanted, rather than built
+freely and checked afterwards.
+
+That forces the generator to respect the language by construction: operands of
+an arithmetic expression share a type, a condition is a `bool`, an unsigned
+value is never negated, comparisons do not chain, names are declared once and
+referenced only in scope, and a literal appears bare only where a declared type
+gives it one. A generated program *may* still fail at run time — overflow,
+division by zero — and that is welcome, because the two paths must then agree on
+the failure too.
+
+```bash
+luarus fuzz 20000            # generate, run both ways, compare
+luarus fuzz 500 --seed 4200  # from a particular seed
+```
+
+A disagreement is reduced by deleting lines and keeping any smaller version that
+still disagrees, so what gets reported is usually a few lines rather than the
+thirty that were generated.
+
+The test suite runs a fixed range of seeds, so a regression shows up as the same
+failing seed rather than as flakiness.
+
+### What it has found
+
+**Two faults in the generator**, both of them the language's sharp edges rather
+than oversights:
+
+- chained comparisons, from picking `bool` as the type to compare *at* — a
+  comparison is itself a `bool`, so its operands could be comparisons;
+- a print item beginning with `-`, which juxtaposition binds into the previous
+  item as a subtraction. The same edge caught the hand-written corpus, in
+  `17-juxtaposition.lrs`.
+
+**One real bug in the compiler.** The constant pool deduplicated entries with
+`==`, and IEEE says `0.0 == -0.0`. So a later `f64 '0'` silently reused the slot
+interned earlier for `f64 '-0'` and came out negative. Constants now compare by
+their bits, which also lets a NaN survive a round trip. `20-signed-zero.lrs`
+keeps it fixed.
+
 ## An oracle is only as good as its corpus
 
 This is worth stating plainly, because it was demonstrated rather than assumed.
@@ -72,4 +117,10 @@ now covered by `18-boundaries.lrs`, `19-just-inside.lrs` and the `just-over`
 failure cases. All five injections are caught now.
 
 The lesson generalises: when adding a feature, add the case that distinguishes
-it from its near neighbour, not just the case that shows it working.
+it from its near neighbour, not just the case that shows it working. Generated
+programs help precisely because they do not know which cases anyone thought
+were interesting.
+
+One injected fault is *supposed* to escape: emitting a condition twice and
+popping the first result changes nothing, since a Luarus condition cannot have
+side effects. A test that flagged it would be wrong.

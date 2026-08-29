@@ -21,6 +21,7 @@ usage:
   luarus dis   <file.lrs | file.lrb>     disassemble, in the spirit of javap -c
   luarus interp <file.lrs>               run on the reference interpreter
   luarus verify <file.lrs>               run both ways and report whether they agree
+  luarus fuzz [count] [--seed n]         generate programs and check both paths agree
   luarus rules                           list every rule the compiler enforces
   luarus version
   luarus help
@@ -69,6 +70,7 @@ fn dispatch(args: &[String]) -> Result<(), Failure> {
         "dis" => cmd_dis(&args[1..]),
         "interp" => cmd_interp(&args[1..]),
         "verify" => cmd_verify(&args[1..]),
+        "fuzz" => cmd_fuzz(&args[1..]),
         "rules" => cmd_rules(),
         other => Err(Failure::Usage(format!("unknown command `{other}`"))),
     }
@@ -200,6 +202,91 @@ fn cmd_verify(args: &[String]) -> Result<(), Failure> {
             "DISAGREE: compiled failed with {a}, interpreted produced {b:?}"
         ))),
     }
+}
+
+/// What one program did on one of the two paths, compared as a whole.
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    Printed(String),
+    /// Compared by rule and line; the wording of a message is not a promise.
+    Failed(&'static str, u32),
+}
+
+/// Run a source text both ways. `None` means it did not compile.
+fn both_ways(src: &str) -> Option<(Outcome, Outcome)> {
+    let checked = luarus_compile::check_tree(src).ok()?;
+    let chunk = luarus_compile::compile(src, "generated").ok()?;
+    let reloaded = serialize::decode(&serialize::encode(&chunk)).ok()?;
+
+    let compiled = match luarus_vm::run_capturing(&reloaded) {
+        Ok(out) => Outcome::Printed(out),
+        Err(e) => Outcome::Failed(e.rule.map(|r| r.slug()).unwrap_or("?"), e.line),
+    };
+    let interpreted = match luarus_interp::run_capturing(&checked) {
+        Ok(out) => Outcome::Printed(out),
+        Err(e) => Outcome::Failed(e.rule.slug(), e.line),
+    };
+    Some((compiled, interpreted))
+}
+
+/// Generate programs and check the two paths agree on each.
+fn cmd_fuzz(args: &[String]) -> Result<(), Failure> {
+    let mut count = 200usize;
+    let mut seed = 0u64;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--seed" => {
+                i += 1;
+                seed = args
+                    .get(i)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| Failure::Usage("`--seed` needs a number".into()))?;
+            }
+            other if other.starts_with("--") => {
+                return Err(Failure::Usage(format!("unknown option `{other}`")))
+            }
+            other => {
+                count = other
+                    .parse()
+                    .map_err(|_| Failure::Usage(format!("`{other}` is not a count")))?
+            }
+        }
+        i += 1;
+    }
+
+    let (mut compiled_ok, mut completed, mut trapped) = (0usize, 0usize, 0usize);
+    for n in 0..count {
+        let s = seed.wrapping_add(n as u64);
+        let src = luarus_gen::program(s);
+
+        let Some((a, b)) = both_ways(&src) else {
+            // A generated program that will not compile is a fault in the
+            // generator, and worth stopping on rather than skipping past.
+            return Err(Failure::Message(format!(
+                "seed {s} produced a program that does not compile:\n\n{src}"
+            )));
+        };
+        compiled_ok += 1;
+
+        if a != b {
+            let smaller = luarus_gen::shrink(&src, |candidate| {
+                both_ways(candidate).map(|(x, y)| x != y).unwrap_or(false)
+            });
+            return Err(Failure::Message(format!(
+                "seed {s} DISAGREES\n  compiled:    {a:?}\n  interpreted: {b:?}\n\n                 shrunk to:\n{smaller}"
+            )));
+        }
+        match a {
+            Outcome::Printed(_) => completed += 1,
+            Outcome::Failed(..) => trapped += 1,
+        }
+    }
+
+    println!(
+        "{compiled_ok} programs, all agreed \n  {completed} ran to completion\n           {trapped} trapped at run time"
+    );
+    Ok(())
 }
 
 /// Every rule an error can cite, so the set can be read without hitting them.

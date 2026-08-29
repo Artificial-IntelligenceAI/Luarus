@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/luarus-diag",
     "crates/luarus-heap",
+    "crates/luarus-gen",
     "crates/luarus-interp",
     "crates/luarus-syntax",
     "crates/luarus-bytecode",
@@ -21,6 +22,7 @@ rust-version = "1.74"
 [workspace.dependencies]
 luarus-diag = { path = "crates/luarus-diag" }
 luarus-heap = { path = "crates/luarus-heap" }
+luarus-gen = { path = "crates/luarus-gen" }
 luarus-interp = { path = "crates/luarus-interp" }
 luarus-syntax = { path = "crates/luarus-syntax" }
 luarus-bytecode = { path = "crates/luarus-bytecode" }

@@ -220,6 +220,7 @@ cargo build --release
 | `luarus dis <file>` | disassemble, in the spirit of `javap -c` |
 | `luarus interp <file>` | run on the reference interpreter instead of the VM |
 | `luarus verify <file>` | run both ways and report whether they agree |
+| `luarus fuzz [n]` | generate programs and check both paths agree |
 | `luarus rules` | list every rule the compiler enforces |
 
 `luarus dis` shows what the compiler actually decided:
@@ -247,9 +248,17 @@ expectation:
 luarus verify examples/hello.lrs
 ```
 
-Five deliberately injected bugs confirm it works — and two of them originally
-escaped, which said more about the corpus than the oracle. See
-[`docs/TESTING.md`](docs/TESTING.md).
+`luarus-gen` then writes programs to feed it. They are generated type-directed,
+so they always compile — a program that did not would be rejected identically by
+both paths and prove nothing:
+
+```bash
+luarus fuzz 20000
+```
+
+This found a real bug: the constant pool deduplicated with `==`, and IEEE says
+`0.0 == -0.0`, so a later `f64 '0'` reused the slot interned for an earlier
+`f64 '-0'` and came out negative. See [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Layout
 
@@ -258,6 +267,7 @@ escaped, which said more about the corpus than the oracle. See
 | `luarus-diag` | spans, the rule set, diagnostic rendering, grapheme segmentation |
 | `luarus-heap` | the object heap: generational handles, mark-sweep collection |
 | `luarus-interp` | reference interpreter, used as a test oracle |
+| `luarus-gen` | generator of valid programs, for property testing |
 | `luarus-syntax` | lexer, AST, parser |
 | `luarus-bytecode` | value types, instructions, chunks, the `.lrb` format, `f16` |
 | `luarus-compile` | type checker and code generation |

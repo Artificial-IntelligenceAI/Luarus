@@ -122,7 +122,7 @@ impl RtType {
 }
 
 /// A constant baked into a chunk's constant pool.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Const {
     /// Any signed integer type; the width lives in the instruction, not here.
     Int(i64),
@@ -135,6 +135,29 @@ pub enum Const {
     Bool(bool),
     Str(String),
     Nil,
+}
+
+/// Constants compare by their **bits**, not by IEEE equality.
+///
+/// The constant pool deduplicates on this, and `0.0 == -0.0` is true in IEEE
+/// arithmetic — so comparing by value would collapse two genuinely different
+/// constants into one, and whichever landed in the pool first would win for
+/// both. It also lets a NaN survive a round trip through the pool, which `==`
+/// would never admit.
+impl PartialEq for Const {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Const::Int(a), Const::Int(b)) => a == b,
+            (Const::Uint(a), Const::Uint(b)) => a == b,
+            (Const::F16(a), Const::F16(b)) => a == b,
+            (Const::F32(a), Const::F32(b)) => a.to_bits() == b.to_bits(),
+            (Const::F64(a), Const::F64(b)) => a.to_bits() == b.to_bits(),
+            (Const::Bool(a), Const::Bool(b)) => a == b,
+            (Const::Str(a), Const::Str(b)) => a == b,
+            (Const::Nil, Const::Nil) => true,
+            _ => false,
+        }
+    }
 }
 
 /// A value on the VM's operand stack.

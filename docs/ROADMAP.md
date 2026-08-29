@@ -44,10 +44,6 @@ promoted to a real part of the language rather than a diagnostics helper.
 triggers a collection, choosing the syntax for `free` and the rule its misuse
 cites, and settling whether strings move onto the heap or stay refcounted.
 
-**Property-based testing.** The oracle compares two implementations on a fixed
-corpus. Generating programs rather than writing them would cover far more of the
-space, and the comparison is already in place to judge them.
-
 ## Deliberately open
 
 - Whether `| |` stays as the grouping delimiter, and whether giving it up would
