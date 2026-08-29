@@ -1,4 +1,4 @@
-# Luarus (Lua + Rust), get it? ☢️ Under development, expect instability.
+# Luarus (Lua + Rust), get it? ⚠️ Under development, expect instability.
 
 **Lua, but explicitly typed.**
 
