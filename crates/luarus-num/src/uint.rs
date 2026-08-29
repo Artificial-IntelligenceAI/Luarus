@@ -64,11 +64,6 @@ impl BigUint {
         }
     }
 
-    fn bit(&self, i: usize) -> bool {
-        let limb = i / 32;
-        limb < self.limbs.len() && (self.limbs[limb] >> (i % 32)) & 1 == 1
-    }
-
     pub fn cmp_to(&self, other: &BigUint) -> Ordering {
         if self.limbs.len() != other.limbs.len() {
             return self.limbs.len().cmp(&other.limbs.len());
