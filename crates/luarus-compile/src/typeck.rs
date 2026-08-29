@@ -66,10 +66,12 @@ pub enum TStmt {
     /// Count from `from` to `to` inclusive, storing each value into `place`.
     /// `counter` and `bound` are hidden slots the loop needs to do that.
     Loop {
-        place: Place,
+        /// `None` when the loop catches nothing.
+        place: Option<Place>,
         ty: RtType,
         from: TExpr,
         to: TExpr,
+        body: Vec<TStmt>,
         counter: u32,
         bound: u32,
         line: u32,
@@ -200,13 +202,28 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::Print { items: checked, line })
             }
 
-            Stmt::Loop { perm, ty, name, from, to, .. } => {
-                let declared = RtType::from_name(&ty.text).ok_or_else(|| {
-                    Diagnostic::new(ty.span, Rule::TypesMustExist, format!("unknown type `{}`", ty.text))
-                })?;
+            Stmt::Loop { perm, target, from, to, body, .. } => {
+                // With no `store-in` clause there is no annotation to read the
+                // bounds as, so their own type is used, and `i64` when even they
+                // do not say.
+                let declared = match target {
+                    Some((ty, _)) => RtType::from_name(&ty.text).ok_or_else(|| {
+                        Diagnostic::new(
+                            ty.span,
+                            Rule::TypesMustExist,
+                            format!("unknown type `{}`", ty.text),
+                        )
+                    })?,
+                    None => self
+                        .probe(from)
+                        .or_else(|| self.probe(to))
+                        .unwrap_or(RtType::I64),
+                };
+
                 if !declared.is_int() {
+                    let span = target.as_ref().map(|(t, _)| t.span).unwrap_or_else(|| from.span());
                     return Err(Diagnostic::new(
-                        ty.span,
+                        span,
                         Rule::LoopsCountIntegers,
                         format!("a loop cannot count over `{}`", declared.name()),
                     )
@@ -218,35 +235,45 @@ impl<'a> Checker<'a> {
                 let from = self.check(from, declared)?;
                 let to = self.check(to, declared)?;
 
-                if *perm {
-                    if let Some(prev) = self.find(&name.text) {
-                        let (line, _) = line_col(self.src, prev.declared_at.start);
-                        return Err(Diagnostic::new(
-                            name.span,
-                            Rule::NamesAreDeclaredOnce,
-                            format!("`({})` is already declared", name.text),
-                        )
-                        .with_help(format!("the first declaration is on line {line}")));
+                let place = match target {
+                    None => None,
+                    Some((_, name)) => {
+                        if let Some(prev) = self.find(&name.text) {
+                            let (line, _) = line_col(self.src, prev.declared_at.start);
+                            return Err(Diagnostic::new(
+                                name.span,
+                                Rule::NamesAreDeclaredOnce,
+                                format!("`({})` is already declared", name.text),
+                            )
+                            .with_help(format!("the first declaration is on line {line}")));
+                        }
+                        let slot = self.out.locals.len() as u32;
+                        self.out.locals.push(name.text.clone());
+                        Some(Place::Local(slot))
                     }
-                }
-
-                let slot = self.out.locals.len() as u32;
-                self.out.locals.push(name.text.clone());
-                let place = Place::Local(slot);
-
-                // Without `perm` the slot still exists — the loop writes to it —
-                // but the name is never bound, so nothing can read it.
-                if *perm {
-                    self.scopes.last_mut().expect("a scope is open").insert(
-                        name.text.clone(),
-                        Binding { place, ty: declared, declared_at: name.span },
-                    );
-                }
+                };
 
                 let counter = self.hidden_slot("loop counter");
                 let bound = self.hidden_slot("loop bound");
+
+                // `perm` binds the name outside the loop, so it survives; `temp`
+                // binds it in the body, so it is visible while the loop runs and
+                // gone afterwards. With no body, `temp` binds it nowhere.
+                self.scopes.push(HashMap::new());
+                if let (Some(place), Some((_, name))) = (place, target) {
+                    let binding = Binding { place, ty: declared, declared_at: name.span };
+                    if *perm {
+                        let depth = self.scopes.len() - 2;
+                        self.scopes[depth].insert(name.text.clone(), binding);
+                    } else {
+                        self.scopes.last_mut().expect("just pushed").insert(name.text.clone(), binding);
+                    }
+                }
+                let body = self.block(body);
+                self.scopes.pop();
+
                 let line = self.line(stmt.span());
-                Ok(TStmt::Loop { place, ty: declared, from, to, counter, bound, line })
+                Ok(TStmt::Loop { place, ty: declared, from, to, body, counter, bound, line })
             }
 
             Stmt::If { arms, else_arm, .. } => {

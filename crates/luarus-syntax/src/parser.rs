@@ -103,6 +103,10 @@ impl Parser {
             let start = self.bump().span;
             return Ok(vec![self.if_stmt(start)?]);
         }
+        if self.at_word("loop") {
+            let start = self.bump().span;
+            return Ok(vec![self.loop_stmt(start)?]);
+        }
         self.chain()
     }
 
@@ -211,9 +215,6 @@ impl Parser {
         if self.eat_word("print") {
             return self.print_stmt(start);
         }
-        if self.eat_word("loop") {
-            return self.loop_stmt(start);
-        }
 
         let t = self.peek().clone();
         if t.tok == Tok::RBrace {
@@ -246,32 +247,51 @@ impl Parser {
         Ok(Stmt::Var { modifier, ty, name, value, span })
     }
 
-    /// `loop perm? store-in <type> (<name>) = <from> to <to>`.
+    /// `loop (perm|temp)? (store-in <type> (<name>))? = <from> to <to>`,
+    /// closed either by a braced body or by `end`.
     fn loop_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
-        let perm = self.eat_word("perm");
+        // `temp` is the default said out loud; `perm` is the one that changes
+        // anything.
+        let perm = if self.eat_word("perm") {
+            true
+        } else {
+            self.eat_word("temp");
+            false
+        };
 
-        if !self.eat_word("store-in") {
-            let t = self.peek().clone();
-            return Err(self
-                .err(t.span, Rule::StatementForm, format!("expected `store-in`, found {}", t.tok.describe()))
-                .with_help("a loop says where its values go: `loop store-in i32 (i) = '0' to '10' end`"));
-        }
+        let target = if self.eat_word("store-in") {
+            let ty = match self.peek().tok.clone() {
+                Tok::Word(text) => {
+                    let span = self.bump().span;
+                    TypeRef { text, span }
+                }
+                other => {
+                    let span = self.peek().span;
+                    return Err(self.err(
+                        span,
+                        Rule::TypesMustExist,
+                        format!("expected a type after `store-in`, found {}", other.describe()),
+                    ));
+                }
+            };
+            let name = self.ident("after the type in a loop")?;
+            Some((ty, name))
+        } else {
+            None
+        };
 
-        let ty = match self.peek().tok.clone() {
-            Tok::Word(text) => {
-                let span = self.bump().span;
-                TypeRef { text, span }
-            }
-            other => {
+        // A type here means the `store-in` was left out rather than the `=`.
+        if target.is_none() {
+            if let Tok::Word(w) = self.peek().tok.clone() {
                 let span = self.peek().span;
                 return Err(self
-                    .err(span, Rule::TypesMustExist, format!("expected a type after `store-in`, found {}", other.describe())));
+                    .err(span, Rule::StatementForm, format!("expected `=`, found `{w}`"))
+                    .with_help("to catch the values, say where: `store-in i32 (i) = ...`"));
             }
-        };
-        let name = self.ident("after the type in a loop")?;
+        }
+
         self.expect_assign()?;
         let from = self.expr()?;
-
         if !self.eat_word("to") {
             let t = self.peek().clone();
             return Err(self
@@ -279,8 +299,24 @@ impl Parser {
                 .with_help("a loop counts between two bounds: `= '0' to '10'`"));
         }
         let to = self.expr()?;
-        let span = start.to(to.span());
-        Ok(Stmt::Loop { perm, ty, name, from, to, span })
+
+        // Braces hold a body; `end` means there is none.
+        if self.peek().tok == Tok::LBrace {
+            let open = self.bump().span;
+            let body = self.arm(open)?;
+            if self.peek().tok != Tok::RBrace {
+                let t = self.peek().clone();
+                return Err(self.err(
+                    t.span,
+                    Rule::BlocksAreBraced,
+                    format!("expected `}}` to close this loop, found {}", t.tok.describe()),
+                ));
+            }
+            let end = self.bump().span;
+            return Ok(Stmt::Loop { perm, target, from, to, body, span: start.to(end) });
+        }
+        let end = self.expect_end()?;
+        Ok(Stmt::Loop { perm, target, from, to, body: Vec::new(), span: start.to(end) })
     }
 
     /// `print [ item item ... ]`. Items are juxtaposed, not separated.

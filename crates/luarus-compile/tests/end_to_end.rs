@@ -671,10 +671,87 @@ fn store_in_is_one_keyword_and_a_hyphen_is_still_a_minus() {
     // The hyphen joins two letters, so subtraction and negation are untouched.
     assert_eq!(run("var i32 (a) = '7'-'3' end print[(a)] end"), "4");
     assert_eq!(run("var i32 (b) = -'3' end print[(b)] end"), "-3");
-    assert!(errors("loop perm i32 (i) = '0' to '3' end")[0].contains("expected `store-in`"));
+    // `store-in` is optional, so leaving it out is only wrong once a type
+    // appears where the `=` should be.
+    let d = diags("loop perm i32 (i) = '0' to '3' end");
+    assert!(d[0].message.contains("expected `=`"), "{:?}", d[0].message);
+    assert!(d[0].help.as_deref().unwrap().contains("store-in"));
 }
 
 #[test]
 fn a_missing_to_is_reported() {
     assert!(errors("loop perm store-in i32 (i) = '0' '3' end")[0].contains("expected `to`"));
+}
+
+// -------------------------------------------------------- loops with bodies
+
+#[test]
+fn runs_the_worked_loop_body_example() {
+    let out = run("loop temp = '0' to '10' {\nprint[\"Hello\" \\n] end }");
+    assert_eq!(out.lines().count(), 11);
+    assert!(out.lines().all(|l| l == "Hello"));
+}
+
+#[test]
+fn a_body_runs_once_per_value() {
+    assert_eq!(run("loop temp store-in i32 (i) = '0' to '3' { print[(i)] end }"), "0123");
+}
+
+#[test]
+fn temp_confines_the_target_to_the_body() {
+    assert_eq!(run("loop temp store-in i32 (i) = '1' to '3' { print[(i)] end }"), "123");
+    assert!(errors("loop temp store-in i32 (i) = '1' to '3' { print[(i)] end } print[(i)] end")[0]
+        .contains("`(i)` is not declared"));
+}
+
+#[test]
+fn perm_keeps_the_target_and_the_body_can_still_see_it() {
+    let src = "loop perm store-in i32 (i) = '1' to '3' { print[(i)] end } print[\"|\" (i)] end";
+    assert_eq!(run(src), "123|3");
+}
+
+#[test]
+fn a_loop_with_no_target_just_repeats() {
+    assert_eq!(run("loop temp = '1' to '4' { print[\"x\"] end }"), "xxxx");
+    // `temp` is the default said out loud, so leaving it off means the same.
+    assert_eq!(run("loop = '1' to '4' { print[\"x\"] end }"), "xxxx");
+}
+
+#[test]
+fn loops_nest() {
+    let src = "loop temp store-in i32 (a) = '1' to '3' { \
+                 loop temp store-in i32 (b) = '1' to '2' { print[(a) (b) \" \"] end } }";
+    assert_eq!(run(src), "11 12 21 22 31 32 ");
+}
+
+#[test]
+fn a_loop_body_holds_whatever_a_block_holds() {
+    let src = "loop temp store-in i32 (n) = '1' to '4' { \
+                 if (n) > '2' { print[\"b\"] end else print[\"s\"] end } }";
+    assert_eq!(run(src), "ssbb");
+}
+
+#[test]
+fn a_body_over_an_empty_range_never_runs() {
+    assert_eq!(run("loop temp = '5' to '1' { print[\"never\"] end } print[\"done\"] end"), "done");
+}
+
+#[test]
+fn untargeted_bounds_fall_back_to_their_own_type() {
+    // Nothing declares a type, so the bounds keep i64 and the loop still counts.
+    assert_eq!(run("loop temp = '1' to '3' { print[\".\"] end }"), "...");
+    // A typed bound is used in preference to the fallback.
+    assert_eq!(run("loop temp = u8 '1' to u8 '3' { print[\".\"] end }"), "...");
+}
+
+#[test]
+fn a_loop_body_is_a_scope() {
+    let src = "loop temp = '1' to '2' { var i32 (inner) = '1' end } print[(inner)] end";
+    assert!(errors(src)[0].contains("`(inner)` is not declared"));
+}
+
+#[test]
+fn an_unclosed_loop_body_is_reported() {
+    let d = diags("loop temp = '1' to '2' { print[\"x\"] end");
+    assert_eq!(d[0].rule, Rule::BlocksAreBraced);
 }

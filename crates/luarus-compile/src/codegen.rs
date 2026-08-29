@@ -49,7 +49,7 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::Write(item.ty()), *line);
                 }
             }
-            TStmt::Loop { place, ty, from, to, counter, bound, line } => {
+            TStmt::Loop { place, ty, from, to, body, counter, bound, line } => {
                 let one = chunk.add_const(if ty.is_unsigned_int() {
                     luarus_bytecode::Const::Uint(1)
                 } else {
@@ -69,12 +69,17 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                 let skip = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
 
                 let top = chunk.code.len() as u32;
-                chunk.emit(Op::LoadLocal(*counter), *line);
-                let store = match place {
-                    Place::Local(slot) => Op::StoreLocal(*slot),
-                    Place::Global(idx) => Op::StoreGlobal(*idx),
-                };
-                chunk.emit(store, *line);
+                if let Some(place) = place {
+                    chunk.emit(Op::LoadLocal(*counter), *line);
+                    chunk.emit(
+                        match place {
+                            Place::Local(slot) => Op::StoreLocal(*slot),
+                            Place::Global(idx) => Op::StoreGlobal(*idx),
+                        },
+                        *line,
+                    );
+                }
+                emit_block(chunk, body);
 
                 // Stepping only when the counter is strictly below the bound
                 // means the increment can never overflow the type.

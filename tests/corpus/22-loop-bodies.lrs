@@ -1,0 +1,37 @@
+-- A body runs once per value. With no `store-in` clause nothing catches the
+-- values, so this is simply "do it eleven times".
+loop temp = '0' to '10' {
+print["Hello" \n] end }
+
+-- `temp` with a target: the name exists inside the body and nowhere else.
+loop temp store-in i32 (i) = '0' to '3' {
+  print[(i) " "] end }
+print[\n] end
+
+-- `perm` with a target and a body: visible inside, and still there after.
+loop perm store-in i32 (j) = '0' to '3' {
+  print[(j) " "] end }
+print["last was " (j) \n] end
+
+-- Loops nest.
+loop temp store-in i32 (a) = '1' to '3' {
+  loop temp store-in i32 (b) = '1' to '3' {
+    print[(a) "x" (b) " "] end }
+}
+print[\n] end
+
+-- A body may hold anything a block may, including an `if`.
+loop temp store-in i32 (n) = '1' to '6' {
+  if (n) > '4' {
+    print["big"] end
+  elseif (n) > '2'
+    print["mid"] end
+  else
+    print["small"] end }
+  print[" "] end
+}
+print[\n] end
+
+-- With no target and no typed bound the loop counts in i64.
+loop temp = '1' to '3' { print["."] end }
+print[\n] end

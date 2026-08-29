@@ -5,10 +5,11 @@ part of a pipeline over a large one. Everything below is open for design.
 
 ## Next
 
-**Iteration with a body.** `loop` counts and stores, but nothing runs per
-value — there is no way yet to *do* something eleven times. Whether that is a
-body on `loop`, a separate construct, or something that falls out of arrays is
-open. `break` and `continue` have no meaning until it exists.
+**`break` and `continue`.** Loops have bodies now, so leaving one early is
+meaningful and there is no way to do it. Neither has a syntax yet.
+
+**Conditional loops.** Everything counts a range; nothing loops until something
+becomes true.
 
 **Functions.** Parameter and return annotations, a call syntax that does not
 collide with `(name)` or with print's `[ ]`, and frames in the VM. This is the

@@ -295,8 +295,7 @@ impl Gen<'_> {
                 let name = self.declare(ty);
                 format!("{modifier}var {} ({name}) = {value}", ty.name())
             }
-            5 => self.loop_stmt(),
-            6 => {
+            5..=6 => {
                 // Assignment, if there is anything to assign to.
                 let live: Vec<Var> = self.visible().cloned().collect();
                 if live.is_empty() {
@@ -311,8 +310,9 @@ impl Gen<'_> {
     }
 
     /// A counting loop. Bounds are kept to small literals so a generated
-    /// program cannot spend the afternoon counting.
-    fn loop_stmt(&mut self) -> String {
+    /// program cannot spend the afternoon counting, and nesting is bounded by
+    /// the statement depth.
+    fn loop_stmt(&mut self, depth: usize) -> String {
         let ints = [
             RtType::I32,
             RtType::I64,
@@ -335,15 +335,49 @@ impl Gen<'_> {
             self.rng.between(from, hi)
         };
 
-        let perm = self.rng.chance(3, 4);
-        let name = if perm {
-            self.declare(ty)
-        } else {
-            // Not declared anywhere: without `perm` the name is never visible.
-            self.fresh_name()
+        let pad = "  ".repeat(depth);
+        let perm = self.rng.chance(1, 2);
+        let keyword = match (perm, self.rng.chance(1, 2)) {
+            (true, _) => "loop perm",
+            (false, true) => "loop temp",
+            (false, false) => "loop",
         };
-        let keyword = if perm { "loop perm" } else { "loop" };
-        format!("{keyword} store-in {} ({name}) = '{from}' to '{to}'", ty.name())
+        let with_body = self.rng.chance(1, 2);
+
+        // Without `store-in` there is nothing to catch the values, and the
+        // bounds fall back to their own type.
+        let target = if self.rng.chance(4, 5) {
+            // A `perm` target outlives the loop, so it joins the enclosing
+            // scope now; a `temp` one is bound inside the body below, if there
+            // is one, and nowhere at all if there is not.
+            let name = if perm { self.declare(ty) } else { self.fresh_name() };
+            let clause = format!(" store-in {} ({name})", ty.name());
+            Some((name, clause))
+        } else {
+            None
+        };
+        let clause = target.as_ref().map(|(_, c)| c.clone()).unwrap_or_default();
+        let header = format!("{pad}{keyword}{clause} = '{from}' to '{to}'");
+
+        if !with_body {
+            return format!("{header} end\n");
+        }
+
+        // A `temp` target is visible inside the body and nowhere else.
+        self.scopes.push(Vec::new());
+        if !perm {
+            if let Some((name, _)) = &target {
+                self.scopes.last_mut().expect("just pushed").push(Var { name: name.clone(), ty });
+            }
+        }
+        let n = 1 + self.rng.below(self.config.max_block_stmts);
+        let mut body = String::new();
+        for _ in 0..n {
+            let s = self.statement(depth + 1);
+            body.push_str(&s);
+        }
+        self.scopes.pop();
+        format!("{header} {{\n{body}{pad}}}\n")
     }
 
     fn print_stmt(&mut self) -> String {
@@ -368,6 +402,9 @@ impl Gen<'_> {
         let pad = "  ".repeat(depth);
         if depth < 2 && self.rng.chance(1, 5) {
             return self.if_stmt(depth);
+        }
+        if depth < 2 && self.rng.chance(1, 6) {
+            return self.loop_stmt(depth);
         }
         // Chain two or three simple statements under one `end` now and then.
         let n = if self.rng.chance(1, 5) { 1 + self.rng.below(2) } else { 0 };

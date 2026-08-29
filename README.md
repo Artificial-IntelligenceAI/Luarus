@@ -123,6 +123,22 @@ A loop reaches the top of its type safely: the step happens only while the
 counter is strictly below the bound, so `'250' to '255'` on a `u8` never
 computes 256.
 
+Give it braces instead of `end` and it runs a body once per value. Both the
+target and the body are optional, and they do different jobs — the target
+catches the values, the body runs on them:
+
+```luarus
+loop temp = '0' to '10' {          -- no target: just do it eleven times
+print["Hello" \n] end }
+
+loop temp store-in i32 (i) = '1' to '3' {
+  print[(i)] end }                 -- (i) exists inside the body only
+```
+
+`perm` and `temp` say how long the target lives: `perm` keeps it after the loop,
+`temp` confines it to the body — and with no body at all, `temp` means nothing
+can see it. `temp` is the default, said out loud.
+
 When arrays land, an array target will collect every value rather than only the
 last.
 

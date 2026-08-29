@@ -133,19 +133,21 @@ pub enum Stmt {
         else_arm: Vec<Stmt>,
         span: Span,
     },
-    /// `loop perm store-in i32 (i) = '0' to '10'`.
+    /// `loop perm store-in i32 (i) = '0' to '10' end`, or
+    /// `loop temp = '0' to '10' { ... }`.
     ///
-    /// A generator rather than a control structure: it has no body. It counts
-    /// from one bound to the other, inclusive at both ends, storing each value
-    /// into its target as it goes — so a scalar target holds the last value.
+    /// Counts from one bound to the other, inclusive at both ends. Both the
+    /// target and the body are optional, and each does a different job: the
+    /// target catches the values, the body runs once per value.
     Loop {
-        /// `perm` keeps the target alive after the loop. Without it the name is
-        /// never visible at all.
+        /// `perm` keeps the target alive after the loop; `temp` confines it.
         perm: bool,
-        ty: TypeRef,
-        name: Name,
+        /// `None` when there is no `store-in` clause, so nothing is caught.
+        target: Option<(TypeRef, Name)>,
         from: Expr,
         to: Expr,
+        /// Empty when the loop is written with `end` rather than braces.
+        body: Vec<Stmt>,
         span: Span,
     },
     Print {

@@ -110,7 +110,7 @@ impl Interp<'_> {
                 Ok(())
             }
 
-            TStmt::Loop { place, ty, from, to, line, .. } => {
+            TStmt::Loop { place, ty, from, to, body, line, .. } => {
                 // Counting directly, with none of the jumps and hidden slots the
                 // compiled form needs — which is the point of the oracle.
                 let from = self.eval(from, *line)?;
@@ -120,11 +120,14 @@ impl Interp<'_> {
                 };
                 let unsigned = ty.is_unsigned_int();
                 while i <= stop {
-                    let v = if unsigned { Value::Uint(i as u64) } else { Value::Int(i as i64) };
-                    match place {
-                        Place::Local(n) => self.locals[*n as usize] = Some(v),
-                        Place::Global(n) => self.globals[*n as usize] = Some(v),
+                    if let Some(place) = place {
+                        let v = if unsigned { Value::Uint(i as u64) } else { Value::Int(i as i64) };
+                        match place {
+                            Place::Local(n) => self.locals[*n as usize] = Some(v),
+                            Place::Global(n) => self.globals[*n as usize] = Some(v),
+                        }
                     }
+                    self.block(body)?;
                     i += 1;
                 }
                 Ok(())

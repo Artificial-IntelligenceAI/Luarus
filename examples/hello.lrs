@@ -64,3 +64,17 @@ print[i32 '42' " and " f64 '1.5' \n] end
 -- holding the last one. `perm` is what keeps that target alive afterwards.
 loop perm store-in i32 (counted) = '0' to '10' end
 print["counted up to " (counted) \n] end
+
+-- Give it braces and it runs the body once per value instead. With no target,
+-- that is simply "do this three times".
+loop temp = '1' to '3' {
+  print["hello" \n] end }
+
+-- With a target, the body can see the value. `temp` confines it to the body;
+-- `perm` would keep it afterwards too.
+loop temp store-in i32 (n) = '1' to '5' {
+  if (n) > '3' {
+    print[(n) " is big" \n] end
+  else
+    print[(n) " is small" \n] end }
+}

@@ -179,18 +179,34 @@ shadow a visible outer one either.
 ### 2.4 Loop
 
 ```
-loop := 'loop' 'perm'? 'store-in' type identifier '=' expression 'to' expression
+loop   := 'loop' lifetime? target? '=' expression 'to' expression body
+lifetime := 'perm' | 'temp'
+target := 'store-in' type identifier
+body   := '{' statement* '}' | 'end'
 ```
 
-A loop is a **generator, not a control structure**: it has no body. It counts
-from the first bound to the second, **inclusive at both ends**, storing each
-value into its target as it goes. A scalar target therefore ends up holding the
-last value.
+A loop counts from the first bound to the second, **inclusive at both ends**.
+Both the target and the body are optional and do different jobs: the target
+catches each value, the body runs once per value.
 
 ```luarus
 loop perm store-in i32 (i) = '0' to '10' end   -- eleven values, 0 through 10
 print[(i)] end                                 -- 10
+
+loop temp = '0' to '10' {                      -- no target: eleven runs
+print["Hello" \n] end }
+
+loop temp store-in i32 (i) = '1' to '3' {      -- both
+  print[(i)] end }
 ```
+
+**Lifetime.** `perm` declares the target in the enclosing scope, so it outlives
+the loop. `temp` declares it in the body, so it is visible while the loop runs
+and gone afterwards — and with no body, nothing can see it at all. `temp` is the
+default, and writing it changes nothing.
+
+**With no target**, there is no annotation for the bounds to read themselves as,
+so they use their own type if they have one and `i64` if they do not.
 
 The target's type must be an **integer**: counting steps by exactly one, which
 only the integer types do exactly.
@@ -209,6 +225,9 @@ runtime error. There is no step and no direction; a loop only counts up.
 A loop never overflows its own type. The step is taken only while the counter is
 strictly below the bound, so counting to a type's maximum never computes one
 past it.
+
+A body is a scope, and it may hold anything a block may, including another loop.
+A body over an empty range never runs.
 
 When arrays exist, an array target will collect every value rather than only the
 last.
