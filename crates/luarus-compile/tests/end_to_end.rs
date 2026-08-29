@@ -649,9 +649,9 @@ fn loop_bounds_are_ordinary_expressions() {
 #[test]
 fn a_loop_counts_only_over_integers() {
     let d = diags("loop perm store-in f64 (i) = '0' to '10' end");
-    assert_eq!(d[0].rule, Rule::LoopsCountIntegers);
+    assert_eq!(d[0].rule, Rule::LoopsCountWholeNumbers);
     assert!(d[0].message.contains("`f64`"), "{:?}", d[0].message);
-    assert_eq!(diags("loop perm store-in str (i) = '0' to '10' end")[0].rule, Rule::LoopsCountIntegers);
+    assert_eq!(diags("loop perm store-in str (i) = '0' to '10' end")[0].rule, Rule::LoopsCountWholeNumbers);
 }
 
 #[test]
@@ -825,10 +825,38 @@ fn er_does_not_mix_with_the_other_numeric_types() {
 }
 
 #[test]
-fn a_loop_cannot_count_over_er() {
-    // Exact rationals are numeric but not integers, and a step of one is only
-    // exact on the integer types.
-    assert_eq!(diags("loop temp store-in er (i) = '0' to '3' end")[0].rule, Rule::LoopsCountIntegers);
+fn a_loop_may_count_over_er() {
+    // An exact rational steps by one as exactly as any integer, and being
+    // unbounded it can count further than any of them.
+    assert_eq!(run("loop temp store-in er (i) = er '0' to er '5' { print[(i)] end }"), "012345");
+    assert_eq!(run("loop temp = er '11' times { print[\"x\"] end }").len(), 11);
+}
+
+#[test]
+fn an_er_loop_bound_must_be_whole() {
+    // Written down, the checker sees it.
+    let d = diags("loop temp = er '1/3' times { print[\"x\"] end }");
+    assert_eq!(d[0].rule, Rule::LoopsCountWholeNumbers);
+    assert!(d[0].message.contains("1/3"), "{:?}", d[0].message);
+
+    // Computed, only the VM can.
+    let e = runtime_error(
+        "var er (a) = '10/3' end loop temp store-in er (i) = er '0' to (a) { print[\"x\"] end }",
+    );
+    assert_eq!(e.rule, Some(Rule::LoopsCountWholeNumbers));
+}
+
+#[test]
+fn an_er_loop_counts_past_every_fixed_width() {
+    // 2^200 by doubling: no other numeric type in the language reaches it.
+    let src = "var er (n) = '1' end loop temp = '200' times { set (n) = (n) * '2' end } print[(n)] end";
+    assert_eq!(run(src).len(), 61);
+}
+
+#[test]
+fn floats_still_cannot_be_counted() {
+    assert_eq!(diags("loop temp = f64 '3' times {}")[0].rule, Rule::LoopsCountWholeNumbers);
+    assert_eq!(diags("loop temp store-in str (i) = '0' to '3' end")[0].rule, Rule::LoopsCountWholeNumbers);
 }
 
 // ------------------------------------------------------------------- times

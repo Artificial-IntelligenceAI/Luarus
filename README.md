@@ -232,8 +232,12 @@ a fraction where none does. Every value is kept in lowest terms, so `'2/4'` and
 `'1/2'` are the same value.
 
 Nothing about `er` overflows, however far you push it, so a zero divisor is the
-only way its arithmetic can fail. It is not an integer type, so a loop cannot
-count over it.
+only way its arithmetic can fail.
+
+A loop can count over `er`, since it steps by one as exactly as any integer —
+and being unbounded, it is the only type that can express a count no fixed width
+would hold. The bounds must be whole numbers: a written fraction is caught by
+the compiler, a computed one by the VM.
 
 The arithmetic is hand-written — arbitrary-precision integers, binary long
 division, Euclid's algorithm — since the whole toolchain has no dependencies.

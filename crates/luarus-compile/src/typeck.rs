@@ -230,14 +230,16 @@ impl<'a> Checker<'a> {
                     LoopRange::Between { from, .. } => from.span(),
                     LoopRange::Times(n) => n.span(),
                 };
-                if !declared.is_int() {
+                // `er` counts too: it steps by exactly one like any integer,
+                // and being unbounded it can count further than any of them.
+                if !declared.is_int() && declared != RtType::Er {
                     let span = target.as_ref().map(|(t, _)| t.span).unwrap_or(range_span);
                     return Err(Diagnostic::new(
                         span,
-                        Rule::LoopsCountIntegers,
+                        Rule::LoopsCountWholeNumbers,
                         format!("a loop cannot count over `{}`", declared.name()),
                     )
-                    .with_help("counting steps by one, which only the integer types do exactly"));
+                    .with_help("only the integer types and `er` step by exactly one"));
                 }
 
                 // Bounds are checked before the name exists, so a loop cannot
@@ -247,10 +249,12 @@ impl<'a> Checker<'a> {
                         (self.check(from, declared)?, self.check(to, declared)?, true)
                     }
                     LoopRange::Times(n) => {
-                        let zero = if declared.is_unsigned_int() {
-                            Const::Uint(0)
-                        } else {
-                            Const::Int(0)
+                        // The zero has to be of the counting type, or the loop
+                        // compares values of two different kinds.
+                        let zero = match declared {
+                            RtType::Er => Const::Er(luarus_num::Rational::zero()),
+                            t if t.is_unsigned_int() => Const::Uint(0),
+                            _ => Const::Int(0),
                         };
                         (TExpr::Const(zero, declared), self.check(n, declared)?, false)
                     }
@@ -273,6 +277,21 @@ impl<'a> Checker<'a> {
                         Some(Place::Local(slot))
                     }
                 };
+
+                // A bound written down as a fraction is knowable now; one that
+                // is computed has to wait for the VM.
+                for bound in [&from, &to] {
+                    if let TExpr::Const(Const::Er(r), _) = bound {
+                        if !r.is_integer() {
+                            return Err(Diagnostic::new(
+                                range_span,
+                                Rule::LoopsCountWholeNumbers,
+                                format!("a loop cannot count from or to `{r}`"),
+                            )
+                            .with_help("a loop bound is a whole number, and this one has a fraction"));
+                        }
+                    }
+                }
 
                 let counter = self.hidden_slot("loop counter");
                 let bound = self.hidden_slot("loop bound");

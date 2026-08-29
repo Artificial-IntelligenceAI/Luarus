@@ -37,6 +37,13 @@ pub enum Op {
     /// Pop a bool; continue at this instruction if it is false.
     JumpIfFalse(u32),
 
+    /// Fail unless local `n` holds a whole number.
+    ///
+    /// Only `er` can carry a fraction into a loop bound, and only when the
+    /// bound was computed rather than written down — a literal is caught by the
+    /// checker instead.
+    RequireWhole(u32),
+
     /// Pop and write, formatting according to the static type. Writes no
     /// newline: every line ending in Luarus is written by hand.
     Write(RtType),
@@ -68,6 +75,7 @@ impl Op {
             Op::Ge(_) => "ge",
             Op::Jump(_) => "jump",
             Op::JumpIfFalse(_) => "jump.false",
+            Op::RequireWhole(_) => "require.whole",
             Op::Write(_) => "write",
             Op::Pop => "pop",
             Op::Halt => "halt",

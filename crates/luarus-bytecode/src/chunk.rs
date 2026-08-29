@@ -113,7 +113,7 @@ fn show_op(chunk: &Chunk, op: Op) -> String {
             let c = chunk.consts.get(n as usize).map(show_const).unwrap_or_default();
             format!("{m:<14} {n}    -- {c}")
         }
-        Op::LoadLocal(n) | Op::StoreLocal(n) => {
+        Op::LoadLocal(n) | Op::StoreLocal(n) | Op::RequireWhole(n) => {
             let name = chunk.local_names.get(n as usize).cloned().unwrap_or_default();
             format!("{m:<14} {n}    -- ({name})")
         }

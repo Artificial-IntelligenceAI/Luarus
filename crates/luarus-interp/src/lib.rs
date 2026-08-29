@@ -116,6 +116,11 @@ impl Interp<'_> {
                 // compiled form needs — which is the point of the oracle.
                 let from = self.eval(from, *line)?;
                 let to = self.eval(to, *line)?;
+
+                if *ty == RtType::Er {
+                    return self.count_exact(place, &from, &to, *inclusive, body, *line);
+                }
+
                 let (Some(mut i), Some(stop)) = (as_int(&from), as_int(&to)) else {
                     return Err(err(Rule::BytecodeIsWellFormed, *line, "loop bounds are not integers"));
                 };
@@ -145,6 +150,53 @@ impl Interp<'_> {
                 }
                 self.block(else_arm)
             }
+        }
+    }
+
+    /// Counting over exact rationals, which are unbounded and so need none of
+    /// the care an integer counter takes near the top of its type.
+    fn count_exact(
+        &mut self,
+        place: &Option<Place>,
+        from: &Value,
+        to: &Value,
+        inclusive: bool,
+        body: &[TStmt],
+        line: u32,
+    ) -> Result<(), InterpError> {
+        let (Value::Er(start), Value::Er(stop)) = (from, to) else {
+            return Err(err(Rule::BytecodeIsWellFormed, line, "loop bounds are not exact"));
+        };
+        for bound in [start, stop] {
+            if !bound.is_integer() {
+                return Err(err(
+                    Rule::LoopsCountWholeNumbers,
+                    line,
+                    format!("a loop cannot count from or to `{bound}`"),
+                ));
+            }
+        }
+
+        let one = luarus_num::Rational::one();
+        let mut i = (**start).clone();
+        loop {
+            let keep_going = match i.cmp_to(stop) {
+                std::cmp::Ordering::Less => true,
+                std::cmp::Ordering::Equal => inclusive,
+                std::cmp::Ordering::Greater => false,
+            };
+            if !keep_going {
+                return Ok(());
+            }
+            if let Some(place) = place {
+                let v = Value::Er(Rc::new(i.clone()));
+                match place {
+                    Place::Local(n) => self.locals[*n as usize] = Some(v),
+                    Place::Global(n) => self.globals[*n as usize] = Some(v),
+                }
+            }
+            self.block(body)?;
+            i = i.add(&one);
         }
     }
 

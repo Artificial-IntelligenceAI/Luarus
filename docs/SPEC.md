@@ -214,8 +214,14 @@ so they use their own type when they have one. Failing that, a pair of bounds
 gets `i64`, and a count gets `u64` — `times` is itself the annotation, and a
 count has no negative values to offer.
 
-The target's type must be an **integer**: counting steps by exactly one, which
-only the integer types do exactly.
+The counting type must be an **integer type or `er`**: those are what step by
+exactly one. An `er` bound must additionally be a **whole number** — a fraction
+written down is rejected by the checker, and one that is computed by the VM,
+both citing `loops-count-whole-numbers`.
+
+Because `er` is unbounded, it is the only type that can express a count larger
+than any fixed width holds. Such a loop will run for as long as it takes;
+nothing bounds it.
 
 The bounds are ordinary expressions, checked against the target's type. They are
 checked *before* the name is bound, so a loop cannot count from itself.
@@ -289,8 +295,7 @@ the only way its arithmetic can fail. Every value is kept in lowest terms, which
 makes equality structural — `'2/4'` and `'1/2'` are one value.
 
 An `er` prints in a form that reads back in: a terminating decimal where the
-denominator has only twos and fives, and `a/b` otherwise. `er` is numeric but
-neither an integer nor a float, so a loop cannot count over it.
+denominator has only twos and fives, and `a/b` otherwise.
 
 `f16` is IEEE 754 binary16. It is stored as 16 bits and re-rounded to half
 precision after every operation, so its precision loss is observable:
@@ -385,7 +390,7 @@ The `message` describes this failure; the `rule` states what always holds; the
 (`names-are-parenthesised`, `values-are-quoted`, `end-closes-a-chain`,
 `statement-form`, `print-takes-brackets`, `groups-are-piped`,
 `comparisons-do-not-chain`, `escapes-are-text`, `lexical-form`,
-`blocks-are-braced`, `conditions-are-bool`, `loops-count-integers`), types
+`blocks-are-braced`, `conditions-are-bool`, `loops-count-whole-numbers`), types
 (`literals-need-a-type`, `values-must-fit`, `no-implicit-conversion`,
 `types-must-exist`, `arithmetic-is-numeric`, `unsigned-is-never-negative`),
 names (`names-must-be-declared`, `names-are-declared-once`), and run time

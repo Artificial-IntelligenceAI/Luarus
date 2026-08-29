@@ -55,6 +55,7 @@ dependencies = [
  "luarus-compile",
  "luarus-diag",
  "luarus-gen",
+ "luarus-num",
  "luarus-syntax",
  "luarus-vm",
 ]

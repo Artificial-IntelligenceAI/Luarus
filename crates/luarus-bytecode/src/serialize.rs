@@ -8,7 +8,7 @@ use crate::op::Op;
 use crate::value::{Const, RtType};
 
 pub const MAGIC: [u8; 4] = *b"LRSB";
-pub const VERSION: u16 = 4;
+pub const VERSION: u16 = 5;
 
 #[derive(Debug)]
 pub struct DecodeError(pub String);
@@ -216,6 +216,10 @@ fn encode_op(w: &mut Writer, op: Op) {
             w.u8(21);
             w.u32(t);
         }
+        Op::RequireWhole(n) => {
+            w.u8(22);
+            w.u32(n);
+        }
     }
 }
 
@@ -375,6 +379,7 @@ fn decode_op(r: &mut Reader) -> Result<Op, DecodeError> {
         19 => Op::Halt,
         20 => Op::Jump(r.u32()?),
         21 => Op::JumpIfFalse(r.u32()?),
+        22 => Op::RequireWhole(r.u32()?),
         _ => return Err(DecodeError(format!("unknown opcode {code}"))),
     })
 }

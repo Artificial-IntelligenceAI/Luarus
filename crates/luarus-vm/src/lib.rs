@@ -106,6 +106,20 @@ impl<'a> Vm<'a> {
                 Op::Pop => {
                     self.pop()?;
                 }
+                Op::RequireWhole(n) => {
+                    let slot = self
+                        .locals
+                        .get(n as usize)
+                        .ok_or_else(|| self.malformed(format!("local slot {n} is out of range")))?;
+                    if let Some(Value::Er(r)) = slot {
+                        if !r.is_integer() {
+                            return Err(self.err(
+                                Rule::LoopsCountWholeNumbers,
+                                format!("a loop cannot count from or to `{r}`"),
+                            ));
+                        }
+                    }
+                }
                 Op::Jump(target) => {
                     self.pc = self.jump_target(target)?;
                 }

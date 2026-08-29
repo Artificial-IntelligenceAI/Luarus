@@ -319,7 +319,9 @@ impl Gen<'_> {
     /// program cannot spend the afternoon counting, and nesting is bounded by
     /// the statement depth.
     fn loop_stmt(&mut self, depth: usize) -> String {
-        let ints = [
+        // `er` counts too, and being unbounded it is the one type whose bounds
+        // need no care near a maximum.
+        let countable = [
             RtType::I32,
             RtType::I64,
             RtType::I8,
@@ -327,8 +329,9 @@ impl Gen<'_> {
             RtType::U8,
             RtType::U32,
             RtType::U64,
+            RtType::Er,
         ];
-        let ty = *self.rng.pick(&ints);
+        let ty = *self.rng.pick(&countable);
         let (lo, hi) = if ty.is_unsigned_int() { (0, 9) } else { (-5, 9) };
         let from = self.rng.between(lo, hi);
         // Sometimes count backwards, which is an empty range and leaves the

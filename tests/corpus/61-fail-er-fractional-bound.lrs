@@ -1,0 +1,4 @@
+-- A written fraction is caught by the checker, so this one has to be computed
+-- for the VM to be the thing that notices.
+var er (third) = '10/3' end
+loop temp store-in er (i) = er '0' to (third) { print["x"] end }

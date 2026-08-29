@@ -50,16 +50,25 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                 }
             }
             TStmt::Loop { place, ty, from, to, inclusive, body, counter, bound, line } => {
-                let one = chunk.add_const(if ty.is_unsigned_int() {
-                    luarus_bytecode::Const::Uint(1)
-                } else {
-                    luarus_bytecode::Const::Int(1)
+                let one = chunk.add_const(match ty {
+                    t if t.is_unsigned_int() => luarus_bytecode::Const::Uint(1),
+                    luarus_bytecode::RtType::Er => {
+                        luarus_bytecode::Const::Er(luarus_num::Rational::one())
+                    }
+                    _ => luarus_bytecode::Const::Int(1),
                 });
 
                 emit_expr(chunk, from, *line);
                 chunk.emit(Op::StoreLocal(*counter), *line);
                 emit_expr(chunk, to, *line);
                 chunk.emit(Op::StoreLocal(*bound), *line);
+
+                // Only `er` can arrive with a fraction, and only when the bound
+                // was computed — a written one was rejected by the checker.
+                if *ty == luarus_bytecode::RtType::Er {
+                    chunk.emit(Op::RequireWhole(*counter), *line);
+                    chunk.emit(Op::RequireWhole(*bound), *line);
+                }
 
                 // An empty range stores nothing at all, so the target is left
                 // unassigned and reading it says so. `to` includes its bound,
