@@ -1,4 +1,4 @@
-# Luarus
+# Luarus (Lua + Rust), get it?
 
 **Lua, but explicitly typed.**
 
