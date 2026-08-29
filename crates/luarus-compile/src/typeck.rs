@@ -51,11 +51,18 @@ impl TExpr {
     }
 }
 
+/// One checked condition and the statements it guards.
+#[derive(Clone, Debug)]
+pub struct TIfArm {
+    pub cond: TExpr,
+    pub body: Vec<TStmt>,
+}
+
 #[derive(Clone, Debug)]
 pub enum TStmt {
     Store { place: Place, value: TExpr, line: u32 },
     Print { items: Vec<TExpr>, line: u32 },
-    If { cond: TExpr, then_arm: Vec<TStmt>, else_arm: Vec<TStmt>, line: u32 },
+    If { arms: Vec<TIfArm>, else_arm: Vec<TStmt>, line: u32 },
 }
 
 /// A whole checked program, ready for code generation.
@@ -182,25 +189,42 @@ impl<'a> Checker<'a> {
                 Ok(TStmt::Print { items: checked, line })
             }
 
-            Stmt::If { cond, then_arm, else_arm, .. } => {
-                // No truthiness: the condition is a bool or it is an error.
-                let cond_ty = self.probe(cond).unwrap_or(RtType::Bool);
-                if cond_ty != RtType::Bool {
-                    return Err(Diagnostic::new(
-                        cond.span(),
-                        Rule::ConditionsAreBool,
-                        format!("this condition is `{}`", cond_ty.name()),
-                    )
-                    .with_help(format!(
-                        "compare it instead, as in `(x) != {} '0'`",
-                        cond_ty.name()
-                    )));
+            Stmt::If { arms, else_arm, .. } => {
+                let mut checked = Vec::with_capacity(arms.len());
+                for arm in arms {
+                    // No truthiness: the condition is a bool or it is an error.
+                    let cond_ty = self.probe(&arm.cond).unwrap_or(RtType::Bool);
+                    if cond_ty != RtType::Bool {
+                        self.errors.push(
+                            Diagnostic::new(
+                                arm.cond.span(),
+                                Rule::ConditionsAreBool,
+                                format!("this condition is `{}`", cond_ty.name()),
+                            )
+                            .with_help(format!(
+                                "compare it instead, as in `(x) != {} '0'`",
+                                cond_ty.name()
+                            )),
+                        );
+                        // Keep checking the body, so one bad condition does not
+                        // hide every error inside the arm it guards.
+                        self.scoped(&arm.body);
+                        continue;
+                    }
+                    match self.check(&arm.cond, RtType::Bool) {
+                        Ok(cond) => {
+                            let body = self.scoped(&arm.body);
+                            checked.push(TIfArm { cond, body });
+                        }
+                        Err(d) => {
+                            self.errors.push(d);
+                            self.scoped(&arm.body);
+                        }
+                    }
                 }
-                let cond = self.check(cond, RtType::Bool)?;
-                let then_arm = self.scoped(then_arm);
                 let else_arm = self.scoped(else_arm);
                 let line = self.line(stmt.span());
-                Ok(TStmt::If { cond, then_arm, else_arm, line })
+                Ok(TStmt::If { arms: checked, else_arm, line })
             }
         }
     }

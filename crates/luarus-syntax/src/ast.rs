@@ -122,11 +122,14 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
-    /// `if cond { ... else ... }`. One brace pair holds both arms, divided by
-    /// `else`, rather than a pair around each.
+    /// `if cond { ... elseif cond ... else ... }`.
+    ///
+    /// One brace pair holds the whole chain; `elseif` and `else` divide it
+    /// rather than opening blocks of their own, so a chain of any length closes
+    /// with a single `}`.
     If {
-        cond: Expr,
-        then_arm: Vec<Stmt>,
+        /// The `if` arm followed by every `elseif` arm, in order.
+        arms: Vec<IfArm>,
         else_arm: Vec<Stmt>,
         span: Span,
     },
@@ -148,6 +151,13 @@ impl Stmt {
             | Stmt::If { span, .. } => *span,
         }
     }
+}
+
+/// One condition and the statements it guards.
+#[derive(Clone, Debug)]
+pub struct IfArm {
+    pub cond: Expr,
+    pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug, Default)]

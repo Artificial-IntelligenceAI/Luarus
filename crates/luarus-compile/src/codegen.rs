@@ -49,22 +49,29 @@ fn emit_block(chunk: &mut Chunk, stmts: &[TStmt]) {
                     chunk.emit(Op::Write(item.ty()), *line);
                 }
             }
-            TStmt::If { cond, then_arm, else_arm, line } => {
-                emit_expr(chunk, cond, *line);
-                // The destinations are not known yet, so both jumps go out with
-                // a placeholder and are corrected once they are reached.
-                let to_else = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
-                emit_block(chunk, then_arm);
+            TStmt::If { arms, else_arm, line } => {
+                // Each arm tests, runs, and jumps clear of the rest. Jump
+                // destinations are unknown when the jumps are emitted, so they
+                // go out with a placeholder and are corrected on arrival.
+                let mut to_end = Vec::with_capacity(arms.len());
+                for (i, arm) in arms.iter().enumerate() {
+                    emit_expr(chunk, &arm.cond, *line);
+                    let to_next = chunk.emit(Op::JumpIfFalse(u32::MAX), *line);
+                    emit_block(chunk, &arm.body);
 
-                if else_arm.is_empty() {
-                    let after = chunk.code.len() as u32;
-                    chunk.patch_jump(to_else, after);
-                } else {
-                    let past_else = chunk.emit(Op::Jump(u32::MAX), *line);
-                    chunk.patch_jump(to_else, chunk.code.len() as u32);
-                    emit_block(chunk, else_arm);
-                    let after = chunk.code.len() as u32;
-                    chunk.patch_jump(past_else, after);
+                    // The last arm needs no jump when nothing follows it.
+                    let more_follows = i + 1 < arms.len() || !else_arm.is_empty();
+                    if more_follows {
+                        to_end.push(chunk.emit(Op::Jump(u32::MAX), *line));
+                    }
+                    let next = chunk.code.len() as u32;
+                    chunk.patch_jump(to_next, next);
+                }
+                emit_block(chunk, else_arm);
+
+                let after = chunk.code.len() as u32;
+                for j in to_end {
+                    chunk.patch_jump(j, after);
                 }
             }
         }

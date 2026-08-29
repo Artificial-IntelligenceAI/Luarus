@@ -78,12 +78,19 @@ impl Parser {
     fn program(&mut self) -> Program {
         let mut stmts = Vec::new();
         while !self.at_eof() {
+            let before = self.pos;
             match self.item() {
                 Ok(mut c) => stmts.append(&mut c),
                 Err(d) => {
                     self.errors.push(d);
                     self.recover();
                 }
+            }
+            // Recovery stops *at* a `}` rather than consuming it, since normally
+            // that brace closes an enclosing block. At the top level there is no
+            // enclosing block, so without this the parser would never advance.
+            if self.pos == before {
+                self.bump();
             }
         }
         Program { stmts }
@@ -99,7 +106,10 @@ impl Parser {
         self.chain()
     }
 
-    /// `if cond { ... else ... }`. Both arms share one brace pair.
+    /// `if cond { ... elseif cond ... else ... }`.
+    ///
+    /// The whole chain lives in one brace pair: `elseif` and `else` divide it
+    /// rather than opening blocks of their own, so nothing piles up at the end.
     fn if_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
         let cond = self.expr()?;
 
@@ -111,24 +121,42 @@ impl Parser {
         }
         let open = self.bump().span;
 
-        let then_arm = self.arm(open)?;
+        let mut arms = vec![IfArm { cond, body: self.arm(open)? }];
+        while self.at_word("elseif") {
+            self.bump();
+            let cond = self.expr()?;
+            arms.push(IfArm { cond, body: self.arm(open)? });
+        }
         let else_arm = if self.eat_word("else") { self.arm(open)? } else { Vec::new() };
+
+        // `else` ends the chain, so anything dividing the block after it is a
+        // mistake worth naming rather than a parse failure.
+        if self.at_word("elseif") {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::BlocksAreBraced, "`elseif` cannot come after `else`")
+                .with_help("`else` is the last arm; move it below the `elseif` arms"));
+        }
+        if self.at_word("else") {
+            let t = self.peek().clone();
+            return Err(self
+                .err(t.span, Rule::BlocksAreBraced, "a block may have only one `else`"));
+        }
 
         if self.peek().tok != Tok::RBrace {
             let t = self.peek().clone();
             return Err(self
-                .err(t.span, Rule::BlocksAreBraced, format!("expected `}}` to close this `if`, found {}", t.tok.describe()))
-                .with_help("only one `else` may divide a block"));
+                .err(t.span, Rule::BlocksAreBraced, format!("expected `}}` to close this `if`, found {}", t.tok.describe())));
         }
         let end = self.bump().span;
-        Ok(Stmt::If { cond, then_arm, else_arm, span: start.to(end) })
+        Ok(Stmt::If { arms, else_arm, span: start.to(end) })
     }
 
-    /// Statements up to `else` or the closing brace.
+    /// Statements up to the next divider or the closing brace.
     fn arm(&mut self, open: Span) -> Result<Vec<Stmt>, Diagnostic> {
         let mut stmts = Vec::new();
         loop {
-            if self.peek().tok == Tok::RBrace || self.at_word("else") {
+            if self.peek().tok == Tok::RBrace || self.at_word("else") || self.at_word("elseif") {
                 return Ok(stmts);
             }
             if self.at_eof() {
@@ -185,6 +213,11 @@ impl Parser {
         }
 
         let t = self.peek().clone();
+        if t.tok == Tok::RBrace {
+            return Err(self
+                .err(t.span, Rule::BlocksAreBraced, "unmatched `}`")
+                .with_help("this brace closes a block that was never opened"));
+        }
         Err(self
             .err(t.span, Rule::StatementForm, format!("expected a statement, found {}", t.tok.describe()))
             .with_help("a statement starts with `var`, `set`, `print`, `global` or `pub`"))

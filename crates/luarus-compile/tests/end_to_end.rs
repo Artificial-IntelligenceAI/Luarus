@@ -439,19 +439,88 @@ fn ifs_nest() {
 }
 
 #[test]
-fn else_may_hold_another_if() {
-    // Chained conditions fall out of `else` holding statements, one of which
-    // can itself be an `if`.
+fn elseif_chains_inside_one_brace_pair() {
     let grade = |n: &str| {
         run(&format!(
             "var i32 (n) = '{n}' end \
              if (n) > '90' {{ print[\"a\"] end \
-             else if (n) > '80' {{ print[\"b\"] end else print[\"c\"] end }} }}"
+             elseif (n) > '80' print[\"b\"] end \
+             elseif (n) > '70' print[\"c\"] end \
+             else print[\"f\"] end }}"
         ))
     };
     assert_eq!(grade("95"), "a");
     assert_eq!(grade("85"), "b");
-    assert_eq!(grade("10"), "c");
+    assert_eq!(grade("75"), "c");
+    assert_eq!(grade("20"), "f");
+}
+
+#[test]
+fn a_chain_of_any_length_closes_with_one_brace() {
+    // The whole point of `elseif`: braces do not pile up.
+    let src = "var i32 (n) = '5' end \
+               if (n) > '9' { print[\"a\"] end \
+               elseif (n) > '8' print[\"b\"] end \
+               elseif (n) > '7' print[\"c\"] end \
+               elseif (n) > '4' print[\"d\"] end \
+               else print[\"e\"] end }";
+    assert_eq!(src.matches('{').count(), 1);
+    assert_eq!(src.matches('}').count(), 1);
+    assert_eq!(run(src), "d");
+}
+
+#[test]
+fn elseif_needs_no_else() {
+    let src = "var i32 (n) = '1' end \
+               if (n) > '9' { print[\"a\"] end elseif (n) > '8' print[\"b\"] end } \
+               print[\"through\"] end";
+    assert_eq!(run(src), "through");
+}
+
+#[test]
+fn else_may_still_hold_another_if() {
+    // Nesting kept working; `elseif` is the tidier way to say the same thing.
+    let src = "var i32 (n) = '85' end \
+               if (n) > '90' { print[\"a\"] end \
+               else if (n) > '80' { print[\"b\"] end else print[\"c\"] end } }";
+    assert_eq!(run(src), "b");
+}
+
+#[test]
+fn elseif_may_not_follow_else() {
+    let d = diags(
+        "var i32 (n) = '1' end if (n) > '9' { print[\"a\"] end else print[\"b\"] end \
+         elseif (n) > '5' print[\"c\"] end }",
+    );
+    assert_eq!(d[0].rule, Rule::BlocksAreBraced);
+    assert!(d[0].message.contains("cannot come after `else`"), "{:?}", d[0].message);
+}
+
+#[test]
+fn a_block_may_have_only_one_else() {
+    let d = diags(
+        "var i32 (n) = '1' end if (n) > '9' { print[\"a\"] end else print[\"b\"] end \
+         else print[\"c\"] end }",
+    );
+    assert!(d[0].message.contains("only one `else`"), "{:?}", d[0].message);
+}
+
+#[test]
+fn a_stray_closing_brace_terminates() {
+    // Recovery stops at `}` rather than consuming it, so without a progress
+    // guard the parser spun forever on one at the top level.
+    let d = diags("print[\"hi\"] end }");
+    assert_eq!(d[0].rule, Rule::BlocksAreBraced);
+    assert!(d[0].message.contains("unmatched"), "{:?}", d[0].message);
+}
+
+#[test]
+fn every_arm_of_a_chain_is_checked() {
+    let e = errors(
+        "var i32 (n) = '1' end if (n) > '9' { print[\"a\"] end \
+         elseif (n) > '5' print[(gone)] end }",
+    );
+    assert!(e[0].contains("`(gone)` is not declared"), "{e:?}");
 }
 
 #[test]

@@ -85,16 +85,18 @@ A block is a scope: a name declared inside one is gone at the `}`. There is **no
 truthiness** — a condition is a `bool` or it is an error, so `if (n)` on an
 integer will not compile.
 
-Conditions chain because `else` holds statements, and one of those may be
-another `if`:
+`elseif` divides the same block again, so a chain of any length still closes
+with a single brace:
 
 ```luarus
 if (score) > '90' {
   print["grade a" \n] end
-else if (score) > '80' {
+elseif (score) > '80'
   print["grade b" \n] end
+elseif (score) > '70'
+  print["grade c" \n] end
 else
-  print["grade c" \n] end } }
+  print["grade f" \n] end }
 ```
 
 ## Typed literals

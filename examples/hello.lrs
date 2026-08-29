@@ -43,15 +43,17 @@ if (total) > i32 '1000' {
 else
   print["total is modest" \n] end }
 
--- A block is a scope, and `else` may hold another `if`, which is how
--- conditions chain.
+-- `elseif` divides the same block again, so a chain of any length still closes
+-- with a single brace.
 var i32 (score) = '85' end
 if (score) > '90' {
   print["grade a" \n] end
-else if (score) > '80' {
+elseif (score) > '80'
   print["grade b" \n] end
+elseif (score) > '70'
+  print["grade c" \n] end
 else
-  print["grade c" \n] end } }
+  print["grade f" \n] end }
 
 -- A literal can state its own type instead of taking one from context, which
 -- lets it stand where nothing would supply one.

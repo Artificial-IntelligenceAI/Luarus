@@ -137,29 +137,37 @@ The name must already be declared; the value is checked against its type.
 ### 2.3 If
 
 ```
-if := 'if' expression '{' statement* ('else' statement*)? '}'
+if := 'if' expression '{' statement*
+      ('elseif' expression statement*)*
+      ('else' statement*)?
+      '}'
 ```
 
 The condition must be `bool`. Luarus has no truthiness: no integer, string or
 `nil` is true or false, and `if (n)` on an `i32` does not compile.
 
-One brace pair holds both arms and `else` divides it, rather than each arm
-carrying its own braces. An `if` is not part of a chain: it closes with `}` and
-takes no `end`, and it cannot be joined to other statements with `,`.
-
-Conditions chain without extra syntax, because `else` holds statements and one
-of those may be another `if`:
+**One brace pair holds the whole chain.** `elseif` and `else` divide it rather
+than opening blocks of their own, so however many arms there are, exactly one
+`}` closes them:
 
 ```luarus
 if (score) > '90' {
   print["a" \n] end
-else if (score) > '80' {
+elseif (score) > '80'
   print["b" \n] end
 else
-  print["c" \n] end } }
+  print["c" \n] end }
 ```
 
-Both arms are checked whether or not they can run.
+`elseif` may repeat; `else` may appear at most once and must come last. An
+`elseif` after an `else`, or a second `else`, is an error rather than a parse
+failure.
+
+An `if` is not part of a chain: it closes with `}`, takes no `end`, and cannot
+be joined to other statements with `,`. Nesting an `if` inside an `else` still
+works and means the same thing — `elseif` is simply the tidier spelling.
+
+Every arm is checked, whether or not it can run.
 
 **A block is a scope.** A name declared inside one is not visible after the
 closing brace. Since a name is declared once, an inner declaration may not
