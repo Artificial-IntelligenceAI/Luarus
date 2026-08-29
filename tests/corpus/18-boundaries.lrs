@@ -1,0 +1,15 @@
+-- Equal operands, where `<` and `<=` part company. Without these, swapping one
+-- for the other in code generation goes unnoticed.
+var i32 (a) = '5' end
+var i32 (b) = '5' end
+print[(a) < (b) " " (a) <= (b) " " (a) > (b) " " (a) >= (b) \n] end
+print[(a) == (b) " " (a) != (b) \n] end
+
+var str (s) = 'apple' end
+print[(s) < 'apple' " " (s) <= 'apple' " " (s) > 'apple' " " (s) >= 'apple' \n] end
+
+var f64 (x) = '1.5' end
+print[(x) < '1.5' " " (x) <= '1.5' " " (x) >= '1.5' \n] end
+
+var bool (t) = 'true' end
+print[(t) == 'true' " " (t) != 'true' \n] end

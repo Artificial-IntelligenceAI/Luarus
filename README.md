@@ -218,6 +218,8 @@ cargo build --release
 | `luarus build <file.lrs> -o <out.lrb>` | compile to bytecode |
 | `luarus check <file.lrs>` | type-check only |
 | `luarus dis <file>` | disassemble, in the spirit of `javap -c` |
+| `luarus interp <file>` | run on the reference interpreter instead of the VM |
+| `luarus verify <file>` | run both ways and report whether they agree |
 | `luarus rules` | list every rule the compiler enforces |
 
 `luarus dis` shows what the compiler actually decided:
@@ -233,12 +235,29 @@ cargo build --release
       6      3  halt
 ```
 
+## Testing
+
+Alongside the usual tests there is a **reference interpreter** that walks the
+checked tree directly — no bytecode, no jumps, no stack. Every corpus program is
+run both ways and the results compared, so code generation, the chunk format and
+the VM are checked against something simpler rather than against a hand-written
+expectation:
+
+```bash
+luarus verify examples/hello.lrs
+```
+
+Five deliberately injected bugs confirm it works — and two of them originally
+escaped, which said more about the corpus than the oracle. See
+[`docs/TESTING.md`](docs/TESTING.md).
+
 ## Layout
 
 | crate | contents |
 | --- | --- |
 | `luarus-diag` | spans, the rule set, diagnostic rendering, grapheme segmentation |
 | `luarus-heap` | the object heap: generational handles, mark-sweep collection |
+| `luarus-interp` | reference interpreter, used as a test oracle |
 | `luarus-syntax` | lexer, AST, parser |
 | `luarus-bytecode` | value types, instructions, chunks, the `.lrb` format, `f16` |
 | `luarus-compile` | type checker and code generation |

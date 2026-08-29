@@ -19,6 +19,8 @@ usage:
   luarus build <file.lrs> [-o <out>]     compile to a .lrb bytecode file
   luarus check <file.lrs>                type-check only, emit nothing
   luarus dis   <file.lrs | file.lrb>     disassemble, in the spirit of javap -c
+  luarus interp <file.lrs>               run on the reference interpreter
+  luarus verify <file.lrs>               run both ways and report whether they agree
   luarus rules                           list every rule the compiler enforces
   luarus version
   luarus help
@@ -65,6 +67,8 @@ fn dispatch(args: &[String]) -> Result<(), Failure> {
         "build" => cmd_build(&args[1..]),
         "check" => cmd_check(&args[1..]),
         "dis" => cmd_dis(&args[1..]),
+        "interp" => cmd_interp(&args[1..]),
+        "verify" => cmd_verify(&args[1..]),
         "rules" => cmd_rules(),
         other => Err(Failure::Usage(format!("unknown command `{other}`"))),
     }
@@ -137,6 +141,65 @@ fn cmd_dis(args: &[String]) -> Result<(), Failure> {
     let chunk = load_chunk(&path)?;
     print!("{}", chunk.disassemble());
     Ok(())
+}
+
+/// Parse and check, returning the tree the interpreter walks.
+fn checked_file(path: &Path) -> Result<luarus_compile::typeck::Checked, Failure> {
+    let src = read_source(path)?;
+    let name = path.display().to_string();
+    luarus_compile::check_tree(&src).map_err(|diags| report(&src, &name, &diags))
+}
+
+fn cmd_interp(args: &[String]) -> Result<(), Failure> {
+    let path = one_path(args, "interp")?;
+    let checked = checked_file(&path)?;
+    let mut out = std::io::stdout().lock();
+    luarus_interp::run(&checked, &mut out).map_err(|e| Failure::Message(e.to_string()))
+}
+
+/// Run a program on both the VM and the reference interpreter and compare.
+///
+/// The two share a front end and differ in the whole back end, so agreement is
+/// evidence about codegen, the chunk format and the VM rather than about the
+/// parser or the type checker.
+fn cmd_verify(args: &[String]) -> Result<(), Failure> {
+    let path = one_path(args, "verify")?;
+    let checked = checked_file(&path)?;
+    let chunk = compile_file(&path)?;
+
+    // Round-trip the chunk, so the container format is under test too.
+    let reloaded = serialize::decode(&serialize::encode(&chunk))
+        .map_err(|e| Failure::Message(format!("{}: {e}", path.display())))?;
+
+    let compiled = luarus_vm::run_capturing(&reloaded);
+    let interpreted = luarus_interp::run_capturing(&checked);
+
+    match (compiled, interpreted) {
+        (Ok(a), Ok(b)) if a == b => {
+            println!("agree: {} bytes of output", a.len());
+            Ok(())
+        }
+        (Ok(a), Ok(b)) => Err(Failure::Message(format!(
+            "DISAGREE on output
+  compiled:    {a:?}
+  interpreted: {b:?}"
+        ))),
+        (Err(a), Err(b)) if a.rule == Some(b.rule) && a.line == b.line => {
+            println!("agree: both fail with [{}] at line {}", b.rule.slug(), b.line);
+            Ok(())
+        }
+        (Err(a), Err(b)) => Err(Failure::Message(format!(
+            "DISAGREE on failure
+  compiled:    {a}
+  interpreted: {b}"
+        ))),
+        (Ok(a), Err(b)) => Err(Failure::Message(format!(
+            "DISAGREE: compiled produced {a:?}, interpreted failed with {b}"
+        ))),
+        (Err(a), Ok(b)) => Err(Failure::Message(format!(
+            "DISAGREE: compiled failed with {a}, interpreted produced {b:?}"
+        ))),
+    }
 }
 
 /// Every rule an error can cite, so the set can be read without hitting them.

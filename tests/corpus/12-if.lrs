@@ -1,0 +1,8 @@
+var f16 (x) = '1000' end
+if (x) > f16 '5' {
+print["x is greater than 5" \n] end
+else print["x is less than 5" \n] end }
+
+var i32 (n) = '1' end
+if (n) > '5' { print["big" \n] end }
+if (n) > '0' { print["positive" \n] end }

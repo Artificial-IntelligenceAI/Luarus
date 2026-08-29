@@ -1,0 +1,2 @@
+var u8 (n) = '0' end
+set (n) = (n) - '1' end

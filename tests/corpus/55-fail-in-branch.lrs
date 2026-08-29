@@ -1,0 +1,5 @@
+var i32 (n) = '9' end
+if (n) > '5' {
+  var i8 (small) = '100' end
+  set (small) = (small) + (small) end
+else print["not reached"] end }

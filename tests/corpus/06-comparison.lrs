@@ -1,0 +1,7 @@
+var i32 (n) = '5' end
+print[(n) == '5' " " (n) != '5' " " (n) < '9' " " (n) <= '5' " " (n) > '9' " " (n) >= '5' \n] end
+var str (s) = 'apple' end
+print[(s) < 'banana' " " (s) == 'apple' \n] end
+var bool (t) = 'true' end
+var bool (f) = 'false' end
+print[(t) == (f) " " (t) != (f) \n] end

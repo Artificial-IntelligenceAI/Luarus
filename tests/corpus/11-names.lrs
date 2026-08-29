@@ -1,0 +1,6 @@
+var str (a friendly greeting) = 'hi' end
+var i32 (🎯 score) = '7' end
+var i32 (🧑‍🧑‍🧒‍🧒) = '4' end
+var i32 (a + b end) = '3' end
+var f64 (Δt) = '0.016' end
+print[(a friendly greeting) " " (🎯 score) " " (🧑‍🧑‍🧒‍🧒) " " (a + b end) " " (Δt) \n] end

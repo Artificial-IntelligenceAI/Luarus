@@ -1,0 +1,7 @@
+-- Juxtaposition binds looser than every operator, so a `-` after an item
+-- continues that item rather than starting a new one. Grouping separates them.
+var i32 (a) = '10' end
+var i32 (b) = '3' end
+print[(a) - (b) \n] end          -- one item: subtraction
+print[(a) |-(b)| \n] end         -- two items: 10 then -3
+print["value: " |-(b)| \n] end   -- text, then a negative number

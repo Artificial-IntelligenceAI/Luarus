@@ -1,0 +1,2 @@
+var i32 (z) = '0' end
+var i32 (n) = '7' % (z) end

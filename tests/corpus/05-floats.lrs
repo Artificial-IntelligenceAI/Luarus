@@ -1,0 +1,10 @@
+var f64 (a) = '1.5' end
+var f64 (b) = '0.25' end
+print[(a) + (b) " " (a) - (b) " " (a) * (b) " " (a) / (b) \n] end
+var f32 (c) = '2049' end
+var f16 (d) = '2049' end
+print[(c) " " (d) \n] end
+var f16 (e) = '2048' end
+print[(e) + '1' " " (e) * '2' \n] end
+var f64 (z) = '0' end
+print[(a) / (z) " " |-(a) / (z)| \n] end

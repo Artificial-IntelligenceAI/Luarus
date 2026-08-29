@@ -1,0 +1,2 @@
+var i8 (n) = '127' end
+set (n) = (n) * '2' end

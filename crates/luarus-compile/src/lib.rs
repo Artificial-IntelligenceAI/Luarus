@@ -16,6 +16,14 @@ pub fn compile(src: &str, source_name: &str) -> Result<Chunk, Vec<Diagnostic>> {
 
 /// Type-check without generating code.
 pub fn check(src: &str) -> Result<(), Vec<Diagnostic>> {
+    check_tree(src).map(|_| ())
+}
+
+/// Parse and type-check, returning the checked tree.
+///
+/// The reference interpreter runs this directly, so that it shares a front end
+/// with the compiler and differs only in the back end.
+pub fn check_tree(src: &str) -> Result<typeck::Checked, Vec<Diagnostic>> {
     let program = luarus_syntax::parse(src)?;
-    typeck::check_program(src, &program).map(|_| ())
+    typeck::check_program(src, &program)
 }

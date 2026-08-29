@@ -1,0 +1,7 @@
+var i32 (a) = '1_000_000' end
+var u8  (b) = '0xff' end
+var i32 (c) = '0b1010' end
+var i32 (d) = '0o777' end
+var f64 (e) = 'inf' end
+var f64 (f) = '-inf' end
+print[(a) " " (b) " " (c) " " (d) " " (e) " " (f) \n] end

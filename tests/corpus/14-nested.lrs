@@ -1,0 +1,9 @@
+var i32 (n) = '7' end
+if (n) > '5' {
+  print["big "] end
+  var i32 (inner) = (n) * '2' end
+  if (inner) > '13' {
+    print["and doubled is " (inner)] end
+  else print["not much"] end }
+else print["small"] end }
+print[\n] end

@@ -1,0 +1,6 @@
+var i32 (a) = '17' end
+var i32 (b) = '5' end
+print[(a) + (b) " " (a) - (b) " " (a) * (b) " " (a) / (b) " " (a) % (b) \n] end
+var i32 (neg) = -(a) end
+-- A bare literal inside a group has no context, so it says its own type.
+print[(neg) " " i32 '-3' " " |-i32 '3'| \n] end

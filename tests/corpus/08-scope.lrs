@@ -1,0 +1,5 @@
+var        i32 (local one) = '1' end
+global var i32 (global one) = '2' end
+pub    var str (exported)   = 'yes' end
+set (global one) = (global one) * '10' end
+print[(local one) " " (global one) " " (exported) \n] end

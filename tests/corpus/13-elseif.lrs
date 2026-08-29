@@ -1,0 +1,9 @@
+var i32 (score) = '85' end
+if (score) > '90' {
+  print["a" \n] end
+elseif (score) > '80'
+  print["b" \n] end
+elseif (score) > '70'
+  print["c" \n] end
+else
+  print["f" \n] end }

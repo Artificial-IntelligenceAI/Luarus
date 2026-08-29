@@ -1,0 +1,2 @@
+var i8 (a) = '127' end
+set (a) = (a) + '1' end

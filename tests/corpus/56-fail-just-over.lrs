@@ -1,0 +1,4 @@
+-- Overflow by exactly one. A range check that is too loose by one lets this
+-- through, which is the whole point of the case.
+var u8 (a) = '255' end
+set (a) = (a) + '1' end

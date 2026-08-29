@@ -1,0 +1,4 @@
+print["tab:" \t "here" \n] end
+print["newline in quotes:\there\n"] end
+print["backslash " \\ " and null-free" \n] end
+print['single' "double" \n] end

@@ -1,0 +1,2 @@
+var u8 (n) = '250' end
+set (n) = (n) + '10' end

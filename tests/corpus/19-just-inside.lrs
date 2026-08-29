@@ -1,0 +1,14 @@
+-- Results landing exactly on the last representable value. An off-by-one in a
+-- range check turns these into spurious overflows.
+var u8 (a) = '254' end
+print[(a) + '1' \n] end
+var i8 (b) = '126' end
+print[(b) + '1' \n] end
+var i8 (c) = '-127' end
+print[(c) - '1' \n] end
+var u8 (d) = '1' end
+print[(d) - '1' \n] end
+var i16 (e) = '32766' end
+print[(e) + '1' \n] end
+var u32 (f) = '4294967294' end
+print[(f) + '1' \n] end

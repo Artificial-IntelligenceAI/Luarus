@@ -12,6 +12,7 @@ version = "0.1.0"
 dependencies = [
  "luarus-bytecode",
  "luarus-compile",
+ "luarus-interp",
  "luarus-syntax",
  "luarus-vm",
 ]
@@ -33,6 +34,17 @@ version = "0.1.0"
 [[package]]
 name = "luarus-heap"
 version = "0.1.0"
+
+[[package]]
+name = "luarus-interp"
+version = "0.1.0"
+dependencies = [
+ "luarus-bytecode",
+ "luarus-compile",
+ "luarus-diag",
+ "luarus-syntax",
+ "luarus-vm",
+]
 
 [[package]]
 name = "luarus-syntax"

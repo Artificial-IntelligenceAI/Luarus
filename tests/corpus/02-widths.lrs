@@ -1,0 +1,10 @@
+var i8  (a) = '-128' end
+var i16 (b) = '32767' end
+var i32 (c) = '-2147483648' end
+var i64 (d) = '9223372036854775807' end
+var u8  (e) = '255' end
+var u16 (f) = '65535' end
+var u32 (g) = '4294967295' end
+var u64 (h) = '18446744073709551615' end
+print[(a) " " (b) " " (c) " " (d) \n] end
+print[(e) " " (f) " " (g) " " (h) \n] end

@@ -1,0 +1,8 @@
+-- Boundary arithmetic that must not overflow.
+var i8 (a) = '127' end
+var i8 (b) = '-128' end
+print[(a) - '1' " " (b) + '1' \n] end
+var u8 (c) = '255' end
+print[(c) / '5' " " (c) % '7' \n] end
+var i64 (big) = '4611686018427387903' end
+print[(big) + (big) \n] end

@@ -1,0 +1,4 @@
+print["a"], print["b"], print["c"] end
+print[\n] end
+var i32 (n) = '1', set (n) = (n) + '4', print[(n) \n] end
+print[] end

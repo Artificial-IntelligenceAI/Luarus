@@ -1,0 +1,4 @@
+print[i32 '42' " " f64 '1.5' " " str '12' " " bool 'true' \n] end
+var bool (b) = i32 '1' == i32 '2' end
+print[(b) " " | f64 '1' / f64 '4' | \n] end
+if u8 '3' > u8 '2' { print["typed condition" \n] end }
