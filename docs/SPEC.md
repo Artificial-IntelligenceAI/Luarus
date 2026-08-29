@@ -3,6 +3,17 @@
 This describes Luarus as implemented. Anything not written here is not yet in
 the language.
 
+## 0. Characters
+
+Luarus counts characters as **extended grapheme clusters**, not Unicode scalar
+values. `c` is one character and so is `🧑‍🧑‍🧒‍🧒`, though the latter is seven
+scalars joined by zero-width joiners. Combining marks, skin-tone modifiers,
+variation selectors, regional-indicator flag pairs, Hangul jamo sequences and
+`CR LF` all count as one character with what they attach to.
+
+This is what error columns and caret widths are measured in, so a caret lands
+under what the eye sees. Segmentation follows the UAX #29 boundary rules.
+
 ## 1. Lexical structure
 
 ### 1.1 Comments
@@ -121,17 +132,15 @@ Juxtaposition binds looser than every operator, so `print[(a) - (b)]` subtracts
 rather than writing `a` then `-b`. Group to force the other reading:
 `print[(a) |-(b)|]`.
 
-**Newlines.** A `print` appends a newline exactly when it is the only statement
-in its chain. A chained `print` writes only what it is given, so it carries its
-own `\n`:
+**Newlines are always explicit.** `print` writes exactly its values and nothing
+else — no separator between items, and no line ending. A newline is a value like
+any other:
 
 ```luarus
 print["1" \n], print["2" \n], print["3" \n] end   -- 1, 2, 3 on three lines
 
-print["1"] end                                    -- 1, then a newline
-print["2"] end                                    -- 2, then a newline
-
-print["1"], print["2"] end                        -- 12, with no newline at all
+print["1"] end                                    -- 1, no newline
+print["1"], print["2"] end                        -- 12, no newline
 ```
 
 ## 3. Types
@@ -219,7 +228,37 @@ A module has one scope. Bindings are local unless a modifier says otherwise.
 Export is recorded in the compiled chunk. With no module system yet, nothing
 consumes it.
 
-## 6. Runtime behaviour
+## 6. Rules and errors
+
+Every error, at compile time or run time, names the rule it broke:
+
+```
+error[values-must-fit]: `300` is out of range for `u8`
+ --> app.lrs:1:18
+  |
+1 | var u8 (small) = '300' end
+  |                  ^^^^^
+  = rule: a literal must be a valid value of the type it is read as
+  = help: `u8` holds values from 0 to 255
+```
+
+The `message` describes this failure; the `rule` states what always holds; the
+`help` suggests a fix. The rule slug is stable and may be relied on.
+
+`luarus rules` prints the set. There are twenty-one, in four groups: form
+(`names-are-parenthesised`, `values-are-quoted`, `end-closes-a-chain`,
+`statement-form`, `print-takes-brackets`, `groups-are-piped`,
+`comparisons-do-not-chain`, `escapes-are-text`, `lexical-form`), types
+(`literals-need-a-type`, `values-must-fit`, `no-implicit-conversion`,
+`types-must-exist`, `arithmetic-is-numeric`, `unsigned-is-never-negative`),
+names (`names-must-be-declared`, `names-are-declared-once`), and run time
+(`overflow-traps`, `no-division-by-zero`, `assign-before-reading`,
+`bytecode-is-well-formed`).
+
+A failure that is not the program's fault — output that could not be written —
+carries no rule.
+
+## 7. Runtime behaviour
 
 Integer arithmetic is checked. Overflow, underflow of an unsigned type, and
 division or remainder by zero all raise a runtime error naming the line. Luarus
@@ -233,7 +272,7 @@ Reading a slot before it is assigned is a runtime error. The checker makes this
 unreachable from valid source; it exists to keep the VM safe against a
 hand-written chunk.
 
-## 7. The `.lrb` format
+## 8. The `.lrb` format
 
 A chunk is little-endian, beginning with the magic `LRSB` and a `u16` version,
 then: source name, local slot count, local debug names, globals (name, type
@@ -243,12 +282,12 @@ number per instruction.
 Instructions are typed. There is no generic `add` that inspects its operands —
 the checker has already proved they match, so `add.i32` does exactly one thing.
 
-`write.<type>` writes one value and never appends a newline; a `print` that owns
-its line emits a `write.str` of `"\n"` after its values. Juxtaposition needs no
+`write.<type>` writes one value and never appends anything. A newline in the
+source is simply a `str` constant written like any other. Juxtaposition needs no
 concatenation instruction, because writing the values in order produces the same
 output.
 
-## 8. Not yet in the language
+## 9. Not yet in the language
 
 Control flow, functions, records, arrays, maps, modules and imports, generics,
 explicit conversions, string operations beyond comparison and printing, and any

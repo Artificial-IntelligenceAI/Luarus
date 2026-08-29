@@ -9,9 +9,8 @@
 use std::collections::HashMap;
 
 use luarus_bytecode::{Const, RtType};
+use luarus_diag::{line_col, Diagnostic, Rule, Span};
 use luarus_syntax::ast::{BinOp, Expr, Modifier, Program, Stmt, UnOp};
-use luarus_syntax::diag::line_col;
-use luarus_syntax::{Diagnostic, Span};
 
 /// Where a binding lives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,7 +54,7 @@ impl TExpr {
 #[derive(Clone, Debug)]
 pub enum TStmt {
     Store { place: Place, value: TExpr, line: u32 },
-    Print { items: Vec<TExpr>, newline: bool, line: u32 },
+    Print { items: Vec<TExpr>, line: u32 },
 }
 
 /// A whole checked program, ready for code generation.
@@ -106,8 +105,7 @@ impl<'a> Checker<'a> {
         match stmt {
             Stmt::Var { modifier, ty, name, value, .. } => {
                 let declared = RtType::from_name(&ty.text).ok_or_else(|| {
-                    Diagnostic::new(ty.span, format!("unknown type `{}`", ty.text))
-                        .with_help(TYPE_LIST)
+                    Diagnostic::new(ty.span, Rule::TypesMustExist, format!("unknown type `{}`", ty.text))
                 })?;
 
                 // Check the initialiser before binding the name, so a
@@ -118,6 +116,7 @@ impl<'a> Checker<'a> {
                     let (line, _) = line_col(self.src, prev.declared_at.start);
                     return Err(Diagnostic::new(
                         name.span,
+                        Rule::NamesAreDeclaredOnce,
                         format!("`({})` is already declared", name.text),
                     )
                     .with_help(format!("the first declaration is on line {line}")));
@@ -157,7 +156,7 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
 
-            Stmt::Print { items, newline, .. } => {
+            Stmt::Print { items, .. } => {
                 let mut checked = Vec::with_capacity(items.len());
                 for item in items {
                     // Everything printed is stringified, so a bare literal in a
@@ -167,11 +166,7 @@ impl<'a> Checker<'a> {
                     checked.push(self.check(item, ty)?);
                 }
                 let line = self.line(stmt.span());
-                self.out.stmts.push(TStmt::Print {
-                    items: checked,
-                    newline: *newline,
-                    line,
-                });
+                self.out.stmts.push(TStmt::Print { items: checked, line });
                 Ok(())
             }
         }
@@ -179,7 +174,8 @@ impl<'a> Checker<'a> {
 
     fn lookup(&self, name: &str, span: Span) -> Result<Binding, Diagnostic> {
         self.scope.get(name).cloned().ok_or_else(|| {
-            let mut d = Diagnostic::new(span, format!("`({name})` is not declared"));
+            let mut d =
+                Diagnostic::new(span, Rule::NamesMustBeDeclared, format!("`({name})` is not declared"));
             if let Some(near) = self.closest(name) {
                 d = d.with_help(format!("a variable named `({near})` is declared; did you mean that?"));
             } else {
@@ -243,7 +239,7 @@ impl<'a> Checker<'a> {
             Expr::Literal { text, span } => match crate::literal::parse(text, expected) {
                 Ok(c) => Ok(TExpr::Const(c, expected)),
                 Err(le) => {
-                    let mut d = Diagnostic::new(*span, le.message);
+                    let mut d = Diagnostic::new(*span, le.rule, le.message);
                     if let Some(h) = le.help {
                         d = d.with_help(h);
                     }
@@ -255,6 +251,7 @@ impl<'a> Checker<'a> {
                 if expected != RtType::Str {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::EscapesAreText,
                         format!("an escape is `str`, but `{}` was expected here", expected.name()),
                     ));
                 }
@@ -266,6 +263,7 @@ impl<'a> Checker<'a> {
                 if b.ty != expected {
                     return Err(Diagnostic::new(
                         n.span,
+                        Rule::NoImplicitConversion,
                         format!(
                             "expected `{}`, but `({})` is `{}`",
                             expected.name(),
@@ -273,10 +271,12 @@ impl<'a> Checker<'a> {
                             b.ty.name()
                         ),
                     )
-                    .with_help(
-                        "Luarus does not convert between types on its own; every width is \
-                         written out",
-                    ));
+                    .with_help(format!(
+                        "the two types must match exactly; declare it as `{}`, or use a value \
+                         that is already `{}`",
+                        b.ty.name(),
+                        expected.name()
+                    )));
                 }
                 Ok(TExpr::Load(b.place, b.ty))
             }
@@ -287,6 +287,7 @@ impl<'a> Checker<'a> {
                 if expected.is_unsigned_int() {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::UnsignedIsNeverNegative,
                         format!("cannot negate a value of unsigned type `{}`", expected.name()),
                     )
                     .with_help(format!(
@@ -297,6 +298,7 @@ impl<'a> Checker<'a> {
                 if !expected.is_numeric() {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::ArithmeticIsNumeric,
                         format!("cannot negate a value of type `{}`", expected.name()),
                     ));
                 }
@@ -308,6 +310,7 @@ impl<'a> Checker<'a> {
                 if expected != RtType::Bool {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::NoImplicitConversion,
                         format!(
                             "expected `{}`, but `{}` produces `bool`",
                             expected.name(),
@@ -325,6 +328,7 @@ impl<'a> Checker<'a> {
                         }
                         return Err(Diagnostic::new(
                             *span,
+                            Rule::LiteralsNeedAType,
                             "cannot tell what type this comparison is over",
                         )
                         .with_help(
@@ -339,6 +343,7 @@ impl<'a> Checker<'a> {
                 {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::ArithmeticIsNumeric,
                         format!("`{}` cannot order values of type `{}`", op.as_str(), operand_ty.name()),
                     ));
                 }
@@ -358,6 +363,7 @@ impl<'a> Checker<'a> {
                 if !expected.is_numeric() {
                     return Err(Diagnostic::new(
                         *span,
+                        Rule::ArithmeticIsNumeric,
                         format!(
                             "`{}` is not defined for type `{}`",
                             op.as_str(),
@@ -379,8 +385,6 @@ impl<'a> Checker<'a> {
         }
     }
 }
-
-const TYPE_LIST: &str = "the types are i8 i16 i32 i64, u8 u16 u32 u64, f16 f32 f64, bool, str, nil";
 
 fn signed_width_hint(ty: RtType) -> u32 {
     match ty {

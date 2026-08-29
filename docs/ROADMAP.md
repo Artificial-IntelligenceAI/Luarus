@@ -32,6 +32,8 @@ stringification is currently the only exception, and a cast would let it stop
 being one.
 
 **A standard library**, and with it the question of how Luarus calls out to Rust.
+String length and indexing will need the grapheme segmentation in `luarus-diag`
+promoted to a real part of the language rather than a diagnostics helper.
 
 ## Deliberately open
 
@@ -39,6 +41,8 @@ being one.
   free `|` for bitwise or logical use.
 - Whether quoted literals stay universal or numbers become bare.
 - Whether print keeps stringifying implicitly once explicit casts exist.
+- Whether a shorthand for "write this and end the line" is worth having, now
+  that every newline is written by hand.
 - Whether `print` stays a keyword or becomes an ordinary function once there is
   a call syntax.
 - Whether unused variables and unreachable code are warnings or errors.

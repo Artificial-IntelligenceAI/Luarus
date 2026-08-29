@@ -21,17 +21,26 @@ name = "luarus-compile"
 version = "0.1.0"
 dependencies = [
  "luarus-bytecode",
+ "luarus-diag",
  "luarus-syntax",
  "luarus-vm",
 ]
 
 [[package]]
+name = "luarus-diag"
+version = "0.1.0"
+
+[[package]]
 name = "luarus-syntax"
 version = "0.1.0"
+dependencies = [
+ "luarus-diag",
+]
 
 [[package]]
 name = "luarus-vm"
 version = "0.1.0"
 dependencies = [
  "luarus-bytecode",
+ "luarus-diag",
 ]

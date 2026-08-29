@@ -33,17 +33,12 @@ pub fn emit(source_name: &str, checked: &Checked) -> Chunk {
                 };
                 chunk.emit(op, *line);
             }
-            TStmt::Print { items, newline, line } => {
+            TStmt::Print { items, line } => {
                 // Juxtaposed items are written in order, which produces exactly
                 // the same output as concatenating them first.
                 for item in items {
                     emit_expr(&mut chunk, item, *line);
                     chunk.emit(Op::Write(item.ty()), *line);
-                }
-                if *newline {
-                    let k = chunk.add_const(luarus_bytecode::Const::Str("\n".into()));
-                    chunk.emit(Op::Const(k), *line);
-                    chunk.emit(Op::Write(luarus_bytecode::RtType::Str), *line);
                 }
             }
         }

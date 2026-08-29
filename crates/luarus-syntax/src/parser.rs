@@ -1,7 +1,6 @@
 use crate::ast::*;
-use crate::diag::Diagnostic;
 use crate::lexer::{Lexer, Tok, Token};
-use crate::span::Span;
+use luarus_diag::{Diagnostic, Rule, Span};
 
 /// Parse a whole source file.
 ///
@@ -57,8 +56,8 @@ impl Parser {
         }
     }
 
-    fn err(&self, span: Span, msg: impl Into<String>) -> Diagnostic {
-        Diagnostic::new(span, msg)
+    fn err(&self, span: Span, rule: Rule, msg: impl Into<String>) -> Diagnostic {
+        Diagnostic::new(span, rule, msg)
     }
 
     /// Skip forward past the next `end`, so the next statement can be parsed.
@@ -93,14 +92,6 @@ impl Parser {
             stmts.push(self.stmt()?);
         }
         self.expect_end()?;
-
-        // A `print` supplies its own newline only when it stands alone. Chained
-        // prints are expected to carry an explicit `\n`.
-        if stmts.len() == 1 {
-            if let Some(Stmt::Print { newline, .. }) = stmts.first_mut() {
-                *newline = true;
-            }
-        }
         Ok(stmts)
     }
 
@@ -122,7 +113,7 @@ impl Parser {
             if !self.at_word("var") {
                 let t = self.peek().clone();
                 return Err(self
-                    .err(t.span, format!("expected `var` after `{}`, found {}", m.as_str(), t.tok.describe()))
+                    .err(t.span, Rule::StatementForm, format!("expected `var` after `{}`, found {}", m.as_str(), t.tok.describe()))
                     .with_help("modifiers attach to a declaration, as in `global var i32 (n) = '0' end`"));
             }
         }
@@ -139,7 +130,7 @@ impl Parser {
 
         let t = self.peek().clone();
         Err(self
-            .err(t.span, format!("expected a statement, found {}", t.tok.describe()))
+            .err(t.span, Rule::StatementForm, format!("expected a statement, found {}", t.tok.describe()))
             .with_help("a statement starts with `var`, `set`, `print`, `global` or `pub`"))
     }
 
@@ -152,7 +143,7 @@ impl Parser {
             other => {
                 let span = self.peek().span;
                 return Err(self
-                    .err(span, format!("expected a type after `var`, found {}", other.describe()))
+                    .err(span, Rule::TypesMustExist, format!("expected a type after `var`, found {}", other.describe()))
                     .with_help("the type comes before the name: `var i32 (x) = '1' end`"));
             }
         };
@@ -168,7 +159,7 @@ impl Parser {
         if self.peek().tok != Tok::LBracket {
             let t = self.peek().clone();
             return Err(self
-                .err(t.span, format!("expected `[` after `print`, found {}", t.tok.describe()))
+                .err(t.span, Rule::PrintTakesBrackets, format!("expected `[` after `print`, found {}", t.tok.describe()))
                 .with_help("print takes its values in brackets: `print[\"hello \" (name)] end`"));
         }
         let open = self.bump().span;
@@ -177,13 +168,13 @@ impl Parser {
         while self.peek().tok != Tok::RBracket {
             if self.at_eof() {
                 return Err(self
-                    .err(open, "unterminated `print`")
+                    .err(open, Rule::PrintTakesBrackets, "unterminated `print`")
                     .with_help("this `[` is never closed by a `]`"));
             }
             items.push(self.expr()?);
         }
         let end = self.bump().span;
-        Ok(Stmt::Print { items, newline: false, span: start.to(end) })
+        Ok(Stmt::Print { items, span: start.to(end) })
     }
 
     fn assign_stmt(&mut self, start: Span) -> Result<Stmt, Diagnostic> {
@@ -203,7 +194,7 @@ impl Parser {
             other => {
                 let span = self.peek().span;
                 Err(self
-                    .err(span, format!("expected a name {ctx}, found {}", other.describe()))
+                    .err(span, Rule::NamesAreParenthesised, format!("expected a name {ctx}, found {}", other.describe()))
                     .with_help("names are parenthesised so they can hold spaces and emoji, as in `(item count)`"))
             }
         }
@@ -214,7 +205,7 @@ impl Parser {
             Ok(self.bump().span)
         } else {
             let t = self.peek().clone();
-            Err(self.err(t.span, format!("expected `=`, found {}", t.tok.describe())))
+            Err(self.err(t.span, Rule::StatementForm, format!("expected `=`, found {}", t.tok.describe())))
         }
     }
 
@@ -224,7 +215,7 @@ impl Parser {
         } else {
             let t = self.peek().clone();
             Err(self
-                .err(t.span, format!("expected `end`, found {}", t.tok.describe()))
+                .err(t.span, Rule::EndClosesAChain, format!("expected `end`, found {}", t.tok.describe()))
                 .with_help(
                     "`end` closes a statement chain; chain statements with `,` or close this one \
                      with `end`",
@@ -259,7 +250,7 @@ impl Parser {
         ) {
             let t = self.peek().clone();
             return Err(self
-                .err(t.span, "comparison operators cannot be chained")
+                .err(t.span, Rule::ComparisonsDoNotChain, "comparison operators cannot be chained")
                 .with_help("group one side explicitly, as in `[ (a) < (b) ] == (c)`"));
         }
         Ok(expr)
@@ -326,7 +317,7 @@ impl Parser {
                 if self.peek().tok != Tok::Pipe {
                     let t = self.peek().clone();
                     return Err(self
-                        .err(t.span, format!("expected `|` to close this group, found {}", t.tok.describe()))
+                        .err(t.span, Rule::GroupsArePiped, format!("expected `|` to close this group, found {}", t.tok.describe()))
                         .with_help(
                             "grouping uses pipes: `(...)` is a name and `[...]` is print's list, \
                              so neither was free",
@@ -338,7 +329,7 @@ impl Parser {
             other => {
                 let span = self.peek().span;
                 Err(self
-                    .err(span, format!("expected a value, found {}", other.describe()))
+                    .err(span, Rule::ValuesAreQuoted, format!("expected a value, found {}", other.describe()))
                     .with_help("a value is a quoted literal like `'12'`, a name like `(x)`, or `| ... |`"))
             }
         }

@@ -7,8 +7,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+luarus-diag.workspace = true
 luarus-syntax.workspace = true
 luarus-bytecode.workspace = true
 
 [dev-dependencies]
 luarus-vm.workspace = true
+luarus-bytecode.workspace = true

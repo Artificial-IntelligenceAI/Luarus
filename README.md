@@ -10,7 +10,7 @@ on the Luarus VM.
 
 ```luarus
 var f16 (x) = '1000' end
-print[(x)] end
+print[(x) \n] end
 ```
 
 That declares a variable **named `x`**, of type `f16`, holding **1000**.
@@ -26,7 +26,13 @@ parens is raw, so a name can be anything you can type:
 var str (a friendly greeting) = 'hello' end
 var i32 (🎯 score)            = '7'     end
 var f64 (Δt)                  = '0.016' end
+var i32 (🧑‍🧑‍🧒‍🧒)                  = '4'     end
 ```
+
+That last name is **one character**. Luarus counts characters the way a reader
+does — as grapheme clusters — so `🧑‍🧑‍🧒‍🧒` is one, exactly like `c`, even though it
+is seven Unicode scalars welded together with zero-width joiners. Error columns
+and caret widths are measured the same way.
 
 **2. Values live in quotes, and the type decides what they mean.** A literal has
 no type of its own. The same four characters are an integer, a float, or text
@@ -78,18 +84,17 @@ print["x=" (x) " k=" (k)] end        -- x=1000.0 k=7
 
 This is the one place Luarus converts without being told to.
 
-A `print` supplies a newline only when it stands **alone** in its chain. Chained
-prints write exactly what you give them, so they say `\n` for themselves:
+`print` writes **exactly** what it is given: no separators between items, and no
+newline. Every line ending is written by hand:
 
 ```luarus
-print["1" \n], print["2" \n], print["3" \n] end
+print["1" \n], print["2" \n], print["3" \n] end   -- three lines
 
-print["1"] end
-print["2"] end
+print["a"], print["b"] end                        -- ab, no newline at all
 ```
 
-Both print `1`, `2`, `3` and `1`, `2` on their own lines. `\n`, `\t`, `\r`,
-`\0` and `\\` also work as bare tokens outside the quotes, as above.
+`\n`, `\t`, `\r`, `\0` and `\\` work as bare tokens outside the quotes, as
+above, or inside them as usual.
 
 ## Types
 
@@ -119,25 +124,39 @@ pub    var str (version) = '0.1.0' end   -- module global, and exported
 
 ## Errors
 
-The point of writing the types down is that the compiler can then be specific.
+Every error names the **rule** it broke. The message says what went wrong here;
+the rule says what is true everywhere.
 
 ```
-error: `300` is out of range for `u8`
+error[values-must-fit]: `300` is out of range for `u8`
  --> app.lrs:1:18
   |
 1 | var u8 (small) = '300' end
   |                  ^^^^^
+  = rule: a literal must be a valid value of the type it is read as
   = help: `u8` holds values from 0 to 255
 ```
 
 ```
-error: `(cont)` is not declared
+error[names-must-be-declared]: `(cont)` is not declared
  --> app.lrs:2:7
   |
 2 | print[(cont)] end
   |       ^^^^^^
+  = rule: a name is declared before it is used
   = help: a variable named `(count)` is declared; did you mean that?
 ```
+
+Runtime errors cite rules too:
+
+```
+runtime error[overflow-traps]: arithmetic overflowed `u8`
+  --> app.lrs:2
+  = rule: arithmetic never wraps; a result must fit its type
+```
+
+`luarus rules` lists the whole set — there are twenty-one, and every error cites
+one of them.
 
 ## Using it
 
@@ -155,6 +174,7 @@ cargo build --release
 | `luarus build <file.lrs> -o <out.lrb>` | compile to bytecode |
 | `luarus check <file.lrs>` | type-check only |
 | `luarus dis <file>` | disassemble, in the spirit of `javap -c` |
+| `luarus rules` | list every rule the compiler enforces |
 
 `luarus dis` shows what the compiler actually decided:
 
@@ -173,7 +193,8 @@ cargo build --release
 
 | crate | contents |
 | --- | --- |
-| `luarus-syntax` | lexer, AST, parser, diagnostics |
+| `luarus-diag` | spans, the rule set, diagnostic rendering, grapheme segmentation |
+| `luarus-syntax` | lexer, AST, parser |
 | `luarus-bytecode` | value types, instructions, chunks, the `.lrb` format, `f16` |
 | `luarus-compile` | type checker and code generation |
 | `luarus-vm` | the virtual machine |

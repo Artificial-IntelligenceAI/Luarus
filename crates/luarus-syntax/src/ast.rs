@@ -1,4 +1,4 @@
-use crate::span::Span;
+use luarus_diag::Span;
 
 /// A visibility/scope modifier written *before* `var`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,10 +120,9 @@ pub enum Stmt {
     },
     Print {
         /// Juxtaposed items, written back to back inside `[ ... ]`.
+        /// `print` writes exactly these and nothing else — no separators and no
+        /// newline. A line ending is written with `\n` like any other value.
         items: Vec<Expr>,
-        /// Whether to end with a newline. True exactly when this `print` is the
-        /// only statement in its chain, per the chaining rule in the spec.
-        newline: bool,
         span: Span,
     },
 }

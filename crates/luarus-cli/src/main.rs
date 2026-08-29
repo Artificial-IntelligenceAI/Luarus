@@ -19,6 +19,7 @@ usage:
   luarus build <file.lrs> [-o <out>]     compile to a .lrb bytecode file
   luarus check <file.lrs>                type-check only, emit nothing
   luarus dis   <file.lrs | file.lrb>     disassemble, in the spirit of javap -c
+  luarus rules                           list every rule the compiler enforces
   luarus version
   luarus help
 ";
@@ -64,6 +65,7 @@ fn dispatch(args: &[String]) -> Result<(), Failure> {
         "build" => cmd_build(&args[1..]),
         "check" => cmd_check(&args[1..]),
         "dis" => cmd_dis(&args[1..]),
+        "rules" => cmd_rules(),
         other => Err(Failure::Usage(format!("unknown command `{other}`"))),
     }
 }
@@ -134,6 +136,15 @@ fn cmd_dis(args: &[String]) -> Result<(), Failure> {
     let path = one_path(args, "dis")?;
     let chunk = load_chunk(&path)?;
     print!("{}", chunk.disassemble());
+    Ok(())
+}
+
+/// Every rule an error can cite, so the set can be read without hitting them.
+fn cmd_rules() -> Result<(), Failure> {
+    let width = luarus_syntax::Rule::ALL.iter().map(|r| r.slug().len()).max().unwrap_or(0);
+    for rule in luarus_syntax::Rule::ALL {
+        println!("{:<width$}  {}", rule.slug(), rule.statement(), width = width);
+    }
     Ok(())
 }
 

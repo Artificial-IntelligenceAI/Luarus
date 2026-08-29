@@ -5,19 +5,25 @@
 //! against. All of the parsing therefore lives here, driven by that type.
 
 use luarus_bytecode::{f16, Const, RtType};
+use luarus_diag::Rule;
 
 #[derive(Debug)]
 pub struct LiteralError {
+    pub rule: Rule,
     pub message: String,
     pub help: Option<String>,
 }
 
 fn err(message: impl Into<String>) -> LiteralError {
-    LiteralError { message: message.into(), help: None }
+    LiteralError { rule: Rule::ValuesMustFit, message: message.into(), help: None }
 }
 
 fn err_help(message: impl Into<String>, help: impl Into<String>) -> LiteralError {
-    LiteralError { message: message.into(), help: Some(help.into()) }
+    LiteralError {
+        rule: Rule::ValuesMustFit,
+        message: message.into(),
+        help: Some(help.into()),
+    }
 }
 
 /// Interpret `text` as a value of type `ty`.

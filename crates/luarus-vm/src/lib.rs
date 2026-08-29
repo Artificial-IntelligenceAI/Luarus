@@ -9,9 +9,13 @@ use std::io::Write;
 
 use luarus_bytecode::value::Value;
 use luarus_bytecode::{f16, Chunk, Op, RtType};
+use luarus_diag::Rule;
 
 #[derive(Debug)]
 pub struct RuntimeError {
+    /// The rule that was broken. `None` for a failure that is not the
+    /// program's fault, such as output that could not be written.
+    pub rule: Option<Rule>,
     pub message: String,
     pub line: u32,
     pub source: String,
@@ -19,7 +23,20 @@ pub struct RuntimeError {
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "runtime error: {}\n  --> {}:{}", self.message, self.source, self.line)
+        match self.rule {
+            Some(rule) => write!(
+                f,
+                "runtime error[{}]: {}\n  --> {}:{}\n  = rule: {}",
+                rule.slug(),
+                self.message,
+                self.source,
+                self.line,
+                rule.statement()
+            ),
+            None => {
+                write!(f, "runtime error: {}\n  --> {}:{}", self.message, self.source, self.line)
+            }
+        }
     }
 }
 
@@ -58,18 +75,25 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn err(&self, message: impl Into<String>) -> RuntimeError {
+    fn err(&self, rule: Rule, message: impl Into<String>) -> RuntimeError {
         // `pc` has already advanced past the failing instruction.
         let idx = self.pc.saturating_sub(1);
         RuntimeError {
+            rule: Some(rule),
             message: message.into(),
             line: self.chunk.lines.get(idx).copied().unwrap_or(0),
             source: self.chunk.source.clone(),
         }
     }
 
+    /// A malformed chunk: unreachable from source the checker accepted, but the
+    /// VM loads `.lrb` files it did not compile, so it must not trust them.
+    fn malformed(&self, message: impl Into<String>) -> RuntimeError {
+        self.err(Rule::BytecodeIsWellFormed, message)
+    }
+
     fn pop(&mut self) -> Result<Value, RuntimeError> {
-        self.stack.pop().ok_or_else(|| self.err("operand stack underflow"))
+        self.stack.pop().ok_or_else(|| self.malformed("operand stack underflow"))
     }
 
     fn run(mut self) -> Result<(), RuntimeError> {
@@ -86,58 +110,58 @@ impl<'a> Vm<'a> {
                         .chunk
                         .consts
                         .get(k as usize)
-                        .ok_or_else(|| self.err(format!("constant {k} is out of range")))?;
+                        .ok_or_else(|| self.malformed(format!("constant {k} is out of range")))?;
                     self.stack.push(Value::from_const(c));
                 }
                 Op::LoadLocal(n) => {
                     let v = self
                         .locals
                         .get(n as usize)
-                        .ok_or_else(|| self.err(format!("local slot {n} is out of range")))?
+                        .ok_or_else(|| self.malformed(format!("local slot {n} is out of range")))?
                         .clone()
                         .ok_or_else(|| {
                             let name = self.name_of_local(n);
-                            self.err(format!("`({name})` is read before it is assigned"))
+                            self.err(
+                                Rule::AssignBeforeReading,
+                                format!("`({name})` is read before it is assigned"),
+                            )
                         })?;
                     self.stack.push(v);
                 }
                 Op::StoreLocal(n) => {
                     let v = self.pop()?;
-                    let slot = self
-                        .locals
-                        .get_mut(n as usize)
-                        .ok_or_else(|| RuntimeError {
-                            message: format!("local slot {n} is out of range"),
-                            line: 0,
-                            source: String::new(),
-                        })?;
-                    *slot = Some(v);
+                    if n as usize >= self.locals.len() {
+                        return Err(self.malformed(format!("local slot {n} is out of range")));
+                    }
+                    self.locals[n as usize] = Some(v);
                 }
                 Op::LoadGlobal(n) => {
                     let v = self
                         .globals
                         .get(n as usize)
-                        .ok_or_else(|| self.err(format!("global {n} is out of range")))?
+                        .ok_or_else(|| self.malformed(format!("global {n} is out of range")))?
                         .clone()
                         .ok_or_else(|| {
                             let name = self.name_of_global(n);
-                            self.err(format!("`({name})` is read before it is assigned"))
+                            self.err(
+                                Rule::AssignBeforeReading,
+                                format!("`({name})` is read before it is assigned"),
+                            )
                         })?;
                     self.stack.push(v);
                 }
                 Op::StoreGlobal(n) => {
                     let v = self.pop()?;
-                    let slot = self.globals.get_mut(n as usize).ok_or(RuntimeError {
-                        message: format!("global {n} is out of range"),
-                        line: 0,
-                        source: String::new(),
-                    })?;
-                    *slot = Some(v);
+                    if n as usize >= self.globals.len() {
+                        return Err(self.malformed(format!("global {n} is out of range")));
+                    }
+                    self.globals[n as usize] = Some(v);
                 }
                 Op::Write(ty) => {
                     let v = self.pop()?;
                     let text = v.display(ty);
                     write!(self.out, "{text}").map_err(|e| RuntimeError {
+                        rule: None,
                         message: format!("could not write output: {e}"),
                         line: 0,
                         source: self.chunk.source.clone(),
@@ -182,15 +206,12 @@ impl<'a> Vm<'a> {
             (Value::F32(a), RtType::F16) => Value::F32(f16::round(-a)),
             (Value::F32(a), _) => Value::F32(-a),
             (Value::F64(a), _) => Value::F64(-a),
-            _ => return Err(self.err(format!("cannot negate a `{}`", ty.name()))),
+            _ => return Err(self.malformed(format!("cannot negate a `{}`", ty.name()))),
         })
     }
 
     fn overflow(&self, what: &str, ty: RtType) -> RuntimeError {
-        self.err(format!(
-            "{what} overflowed `{}`; Luarus traps on overflow rather than wrapping",
-            ty.name()
-        ))
+        self.err(Rule::OverflowTraps, format!("{what} overflowed `{}`", ty.name()))
     }
 
     /// Narrow a signed result to `ty`, or report overflow.
@@ -213,7 +234,7 @@ impl<'a> Vm<'a> {
     fn arith(&self, op: Op, lhs: Value, rhs: Value, ty: RtType) -> Result<Value, RuntimeError> {
         if ty.is_signed_int() {
             let (Value::Int(a), Value::Int(b)) = (&lhs, &rhs) else {
-                return Err(self.err("expected signed integers"));
+                return Err(self.malformed("expected signed integers"));
             };
             let (a, b) = (*a, *b);
             let r = match op {
@@ -222,13 +243,13 @@ impl<'a> Vm<'a> {
                 Op::Mul(_) => a.checked_mul(b),
                 Op::Div(_) => {
                     if b == 0 {
-                        return Err(self.err("division by zero"));
+                        return Err(self.err(Rule::NoDivisionByZero, "division by zero"));
                     }
                     a.checked_div(b)
                 }
                 Op::Rem(_) => {
                     if b == 0 {
-                        return Err(self.err("remainder by zero"));
+                        return Err(self.err(Rule::NoDivisionByZero, "remainder by zero"));
                     }
                     a.checked_rem(b)
                 }
@@ -240,27 +261,30 @@ impl<'a> Vm<'a> {
 
         if ty.is_unsigned_int() {
             let (Value::Uint(a), Value::Uint(b)) = (&lhs, &rhs) else {
-                return Err(self.err("expected unsigned integers"));
+                return Err(self.malformed("expected unsigned integers"));
             };
             let (a, b) = (*a, *b);
             let r = match op {
                 Op::Add(_) => a.checked_add(b),
-                Op::Sub(_) => a.checked_sub(b).ok_or_else(|| {
-                    self.err(format!(
-                        "subtraction went below zero in unsigned type `{}`",
-                        ty.name()
-                    ))
-                }).map(Some)?,
+                Op::Sub(_) => a
+                    .checked_sub(b)
+                    .ok_or_else(|| {
+                        self.err(
+                            Rule::UnsignedIsNeverNegative,
+                            format!("subtraction went below zero in `{}`", ty.name()),
+                        )
+                    })
+                    .map(Some)?,
                 Op::Mul(_) => a.checked_mul(b),
                 Op::Div(_) => {
                     if b == 0 {
-                        return Err(self.err("division by zero"));
+                        return Err(self.err(Rule::NoDivisionByZero, "division by zero"));
                     }
                     a.checked_div(b)
                 }
                 Op::Rem(_) => {
                     if b == 0 {
-                        return Err(self.err("remainder by zero"));
+                        return Err(self.err(Rule::NoDivisionByZero, "remainder by zero"));
                     }
                     a.checked_rem(b)
                 }
@@ -274,21 +298,21 @@ impl<'a> Vm<'a> {
         match ty {
             RtType::F64 => {
                 let (Value::F64(a), Value::F64(b)) = (&lhs, &rhs) else {
-                    return Err(self.err("expected f64 operands"));
+                    return Err(self.malformed("expected f64 operands"));
                 };
                 let r = float_op(op, *a, *b);
                 Ok(Value::F64(r))
             }
             RtType::F32 | RtType::F16 => {
                 let (Value::F32(a), Value::F32(b)) = (&lhs, &rhs) else {
-                    return Err(self.err("expected f32 operands"));
+                    return Err(self.malformed("expected f32 operands"));
                 };
                 let r = float_op(op, *a as f64, *b as f64) as f32;
                 // Half precision is re-rounded after every step, so the extra
                 // range of the f32 carrier never leaks into results.
                 Ok(Value::F32(if ty == RtType::F16 { f16::round(r) } else { r }))
             }
-            _ => Err(self.err(format!("`{}` has no arithmetic", ty.name()))),
+            _ => Err(self.malformed(format!("`{}` has no arithmetic", ty.name()))),
         }
     }
 
@@ -301,7 +325,7 @@ impl<'a> Vm<'a> {
             (Value::Bool(a), Value::Bool(b)) => a.partial_cmp(b),
             (Value::Str(a), Value::Str(b)) => Some(a.as_ref().cmp(b.as_ref())),
             (Value::Nil, Value::Nil) => Some(std::cmp::Ordering::Equal),
-            _ => return Err(self.err(format!("cannot compare these `{}` values", ty.name()))),
+            _ => return Err(self.malformed(format!("cannot compare these `{}` values", ty.name()))),
         };
 
         use std::cmp::Ordering::*;

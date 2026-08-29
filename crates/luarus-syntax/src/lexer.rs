@@ -1,5 +1,4 @@
-use crate::diag::Diagnostic;
-use crate::span::Span;
+use luarus_diag::{Diagnostic, Rule, Span};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
@@ -152,7 +151,7 @@ impl<'a> Lexer<'a> {
             return Ok(Token { tok, span: Span::new(start, self.pos) });
         }
         if b == b'!' {
-            return Err(Diagnostic::new(Span::new(start, start + 1), "unexpected `!`")
+            return Err(Diagnostic::new(Span::new(start, start + 1), Rule::LexicalForm, "unexpected `!`")
                 .with_help("`!` only appears as part of the `!=` operator"));
         }
 
@@ -172,16 +171,17 @@ impl<'a> Lexer<'a> {
             let Some(b) = self.peek() else {
                 return Err(Diagnostic::new(
                     Span::new(start, self.pos),
+                    Rule::NamesAreParenthesised,
                     "unterminated identifier",
                 )
-                .with_help("identifiers are written `(name)` and must be closed with `)`"));
+                .with_help("this `(` is never closed by a `)`"));
             };
             match b {
                 b')' => {
                     self.pos += 1;
                     let span = Span::new(start, self.pos);
                     if name.is_empty() {
-                        return Err(Diagnostic::new(span, "empty identifier")
+                        return Err(Diagnostic::new(span, Rule::NamesAreParenthesised, "empty identifier")
                             .with_help("a name must have at least one character, as in `(x)`"));
                     }
                     return Ok(Token { tok: Tok::Ident(name), span });
@@ -196,6 +196,7 @@ impl<'a> Lexer<'a> {
                         _ => {
                             return Err(Diagnostic::new(
                                 Span::new(self.pos - 1, self.pos),
+                                Rule::NamesAreParenthesised,
                                 "invalid escape in identifier",
                             )
                             .with_help("inside `(...)` only `\\(`, `\\)` and `\\\\` are escapes"))
@@ -205,6 +206,7 @@ impl<'a> Lexer<'a> {
                 b'\n' => {
                     return Err(Diagnostic::new(
                         Span::new(start, self.pos),
+                        Rule::NamesAreParenthesised,
                         "unterminated identifier",
                     )
                     .with_help("an identifier cannot span multiple lines"))
@@ -225,8 +227,12 @@ impl<'a> Lexer<'a> {
         let mut text = String::new();
         loop {
             let Some(b) = self.peek() else {
-                return Err(Diagnostic::new(Span::new(start, self.pos), "unterminated literal")
-                    .with_help("every literal is quoted, as in `'1000'`"));
+                return Err(Diagnostic::new(
+                    Span::new(start, self.pos),
+                    Rule::ValuesAreQuoted,
+                    "unterminated literal",
+                )
+                .with_help("this quote is never closed"));
             };
             if b == quote {
                 self.pos += 1;
@@ -235,7 +241,11 @@ impl<'a> Lexer<'a> {
             if b == b'\\' {
                 self.pos += 1;
                 let esc = self.peek().ok_or_else(|| {
-                    Diagnostic::new(Span::new(start, self.pos), "unterminated literal")
+                    Diagnostic::new(
+                        Span::new(start, self.pos),
+                        Rule::ValuesAreQuoted,
+                        "unterminated literal",
+                    )
                 })?;
                 let ch = match esc {
                     b'n' => '\n',
@@ -248,6 +258,7 @@ impl<'a> Lexer<'a> {
                     _ => {
                         return Err(Diagnostic::new(
                             Span::new(self.pos - 1, self.pos + 1),
+                            Rule::ValuesAreQuoted,
                             format!("invalid escape `\\{}`", esc as char),
                         )
                         .with_help("valid escapes are \\n \\t \\r \\0 \\\\ \\' \\\""))
@@ -267,7 +278,11 @@ impl<'a> Lexer<'a> {
     fn lex_escape(&mut self, start: usize) -> Result<Token, Diagnostic> {
         self.pos += 1; // consume the backslash
         let Some(c) = self.peek() else {
-            return Err(Diagnostic::new(Span::new(start, self.pos), "escape is missing its letter")
+            return Err(Diagnostic::new(
+                Span::new(start, self.pos),
+                Rule::EscapesAreText,
+                "escape is missing its letter",
+            )
                 .with_help("a bare escape is written `\\n`, `\\t`, `\\r`, `\\0` or `\\\\`"));
         };
         let text = match c {
@@ -280,6 +295,7 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 return Err(Diagnostic::new(
                     Span::new(start, self.pos),
+                    Rule::EscapesAreText,
                     format!("invalid escape `\\{}`", c as char),
                 )
                 .with_help("a bare escape is written `\\n`, `\\t`, `\\r`, `\\0` or `\\\\`"));
@@ -303,6 +319,7 @@ impl<'a> Lexer<'a> {
             self.pos = start + ch.len_utf8();
             return Err(Diagnostic::new(
                 Span::new(start, self.pos),
+                Rule::LexicalForm,
                 format!("unexpected character `{ch}`"),
             )
             .with_help("names go in parentheses and values go in quotes, as in `var i32 (x) = '1' end`"));
