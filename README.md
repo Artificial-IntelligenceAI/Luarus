@@ -1,4 +1,4 @@
-# Luarus (Lua + Rust), get it? ⚠️ Under development, expect instability.
+# Luarus (Lua + Rust), get it? ⚠️ Under development, expect instability. Abandoned,successor won't share code.
 
 **Lua, but explicitly typed.**
 
